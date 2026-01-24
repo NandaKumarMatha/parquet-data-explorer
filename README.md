@@ -1,5 +1,7 @@
 # Parquet Data Explorer
 
+[![CI](https://github.com/NandaKumarMatha/parquet-data-explorer/actions/workflows/ci.yml/badge.svg)](https://github.com/NandaKumarMatha/parquet-data-explorer/actions/workflows/ci.yml)
+
 A cross-platform desktop application for viewing, editing, and manipulating Parquet files.
 
 ## Author
@@ -16,13 +18,13 @@ This is an open-source project. Contributions welcome.
 - Convert to other formats (CSV, JSON, Excel)
 - Create new Parquet files
 
-## Requirements
-- Python 3.8+
-- Dependencies: See requirements.txt
-
 ## Installation
-1. Clone or download the project.
-2. Install dependencies: `pip install -r requirements.txt`
+
+Download the latest release from [GitHub Releases](https://github.com/NandaKumarMatha/parquet-data-explorer/releases).
+
+Or install from source:
+1. Clone: `git clone https://github.com/NandaKumarMatha/parquet-data-explorer.git`
+2. Install: `pip install -r requirements.txt`
 3. Run: `python main.py`
 
 ## Building for Distribution
@@ -31,6 +33,15 @@ Use PyInstaller to create a standalone executable:
 - For a directory: `pyinstaller --onedir --windowed main.py`
 
 The executable will be in the `dist/` folder.
+
+## Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
 ## License
 
