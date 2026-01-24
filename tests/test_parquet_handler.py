@@ -7,6 +7,7 @@ import os
 def test_parquet_handler():
     # Create test data
     df = pd.DataFrame({'a': [1, 2, 3], 'b': ['x', 'y', 'z']})
+    df['b'] = df['b'].astype('object')  # Ensure object dtype
     
     # Save to temp file
     with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as f:
