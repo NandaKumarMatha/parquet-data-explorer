@@ -43,6 +43,30 @@ Contributions are welcome! Please:
 4. Add tests if applicable
 5. Submit a pull request
 
+## Roadmap
+
+### ✅ Completed Features
+- File operations (open, save, new Parquet files)
+- Data viewing with sortable table
+- Inline data editing with validation
+- SQL querying using DuckDB
+- Real-time search and filtering
+- Column statistics panel
+- Export to CSV, JSON, Excel
+- Cross-platform builds (Windows, Linux)
+- CI/CD with automated testing and releases
+- Unit tests for core functionality
+
+### 🚧 Upcoming Features
+- Data visualization (charts for numeric columns)
+- Undo/Redo functionality
+- Large file support (pagination/virtual scrolling)
+- Advanced filtering options
+- Plugin system for custom transformations
+- Dark/light theme support
+- Performance optimizations
+- Accessibility improvements
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
