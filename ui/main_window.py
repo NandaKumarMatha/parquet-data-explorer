@@ -6,6 +6,16 @@ import duckdb
 import os
 from data.parquet_handler import load_parquet, save_parquet, get_metadata
 
+class CustomDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QLineEdit):
+            # Set full text for editing
+            model = index.model()
+            full_value = str(model.sourceModel().df.iloc[index.row(), index.column()])
+            editor.setText(full_value)
+        return editor
+
 class DataFrameModel(QAbstractTableModel):
     def __init__(self, df, main_df):
         super().__init__()
@@ -20,7 +30,15 @@ class DataFrameModel(QAbstractTableModel):
 
     def data(self, index, role):
         if role == Qt.ItemDataRole.DisplayRole:
-            return str(self.df.iloc[index.row(), index.column()])
+            value = str(self.df.iloc[index.row(), index.column()])
+            if len(value) > 50:  # Truncate long text
+                return value[:47] + "..."
+            return value
+        elif role == Qt.ItemDataRole.ToolTipRole:
+            value = str(self.df.iloc[index.row(), index.column()])
+            if len(value) > 50:
+                return value  # Show full text in tooltip
+            return None
 
     def headerData(self, section, orientation, role):
         if role == Qt.ItemDataRole.DisplayRole:
@@ -205,6 +223,12 @@ class MainWindow(QMainWindow):
         self.model = DataFrameModel(self.filtered_df, self.df)
         self.proxy.setSourceModel(self.model)
         self.table.setModel(self.proxy)
+        self.table.setItemDelegate(CustomDelegate(self.table))
+        # Set maximum column width to 50% of screen width
+        screen = QApplication.primaryScreen()
+        max_width = screen.size().width() // 2
+        for col in range(len(self.filtered_df.columns)):
+            self.table.setColumnWidth(col, min(self.table.columnWidth(col), max_width))
         self.row_col_label.setText(f"Rows: {len(self.filtered_df)}, Columns: {len(self.filtered_df.columns)}")
         self.update_stats()
 
