@@ -223,11 +223,11 @@ class MainWindow(QMainWindow):
         self.proxy.setSourceModel(self.model)
         self.table.setModel(self.proxy)
         self.table.setItemDelegate(CustomDelegate())
-        # Set maximum column width to 50% of screen width
-        screen = QApplication.primaryScreen()
-        max_width = screen.size().width() // 2
+        # Set maximum column width to 50% of table width
+        table_width = self.table.width()
+        max_col_width = table_width // 2
         for col in range(len(self.filtered_df.columns)):
-            self.table.setColumnWidth(col, min(self.table.columnWidth(col), max_width))
+            self.table.setColumnWidth(col, min(self.table.columnWidth(col), max_col_width))
         self.row_col_label.setText(f"Rows: {len(self.filtered_df)}, Columns: {len(self.filtered_df.columns)}")
         self.update_stats()
 
