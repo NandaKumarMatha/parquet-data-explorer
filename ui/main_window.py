@@ -10,9 +10,10 @@ class CustomDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         editor = super().createEditor(parent, option, index)
         if isinstance(editor, QLineEdit):
-            # Set full text for editing
-            model = index.model()
-            full_value = str(model.sourceModel().df.iloc[index.row(), index.column()])
+            # Map proxy index to source index
+            source_index = index.model().mapToSource(index)
+            # Get full text from source model
+            full_value = str(source_index.model().df.iloc[source_index.row(), source_index.column()])
             editor.setText(full_value)
         return editor
 
