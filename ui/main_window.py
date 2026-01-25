@@ -196,15 +196,7 @@ class MainWindow(QMainWindow):
         self.stats_dock = QDockWidget("Statistics", self)
         self.stats_dock.setWidget(self.stats_text)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.stats_dock)
-        self.query_dock.dockLocationChanged.connect(self.adjust_dock_positions)
-        self.stats_dock.dockLocationChanged.connect(self.adjust_dock_positions)
-
-    def adjust_dock_positions(self):
-        query_area = self.dockWidgetArea(self.query_dock)
-        stats_area = self.dockWidgetArea(self.stats_dock)
-        if query_area != stats_area:
-            # Move stats to same area as query
-            self.addDockWidget(query_area, self.stats_dock)
+        self.tabifyDockWidget(self.query_dock, self.stats_dock)
 
     def filter_data(self):
         text = self.search_edit.text().lower()
