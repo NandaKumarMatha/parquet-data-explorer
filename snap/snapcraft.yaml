@@ -1,0 +1,33 @@
+name: parquet-explorer
+base: core24
+version: '0.1.0'
+summary: A simple Parquet file viewer
+description: |
+  A PyQt6 based application to view and explore Parquet files.
+  Features include opening parquet files and viewing them in a table.
+
+grade: devel # Change to 'stable' for release
+confinement: strict
+
+apps:
+  parquet-explorer:
+    command: bin/parquet-explorer
+    plugs: [home, desktop, desktop-legacy, wayland, x11, opengl, removable-media]
+    extensions: [gnome]
+    environment:
+      # Ensure python can find site-packages
+      PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/lib/python3.12/site-packages
+
+parts:
+  parquet-viewer:
+    plugin: python
+    source: .
+    python-packages:
+      - PyQt6
+      - pyarrow
+      - pandas
+      - duckdb
+    stage-packages:
+      - libpython3-stdlib
+      - libpython3.12-minimal
+      - libpython3.12-stdlib
