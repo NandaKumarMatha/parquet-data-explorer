@@ -30,11 +30,15 @@ jobs:
       with:
         name: snap
         path: .
-        
+    
+    - name: Get Snap Filename
+      id: snap_filename
+      run: echo "SNAP_FILE=$(ls *.snap | head -n 1)" >> $GITHUB_OUTPUT
+
     - name: Publish Snap
       uses: snapcore/action-publish@v1
       env:
         SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
       with:
-        snap: ${{ steps.build.outputs.snap }}
+        snap: ${{ steps.snap_filename.outputs.SNAP_FILE }}
         release: edge
