@@ -1,4 +1,5 @@
 name: parquet-explorer
+common-id: parquet-explorer
 base: core24
 version: '0.1.0'
 summary: A simple Parquet file viewer
@@ -12,6 +13,7 @@ confinement: strict
 apps:
   parquet-explorer:
     command: bin/parquet-explorer
+    desktop: snap/gui/parquet-explorer.desktop
     plugs: [home, desktop, desktop-legacy, wayland, x11, opengl, removable-media]
     extensions: [gnome]
     environment:
