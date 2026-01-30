@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Parquet Explorer
+Exec=parquet-explorer
+Icon=${SNAP}/meta/gui/icon.svg
+Type=Application
+Categories=Development;Utility;
+Comment=View and explore Parquet files
+Terminal=false

@@ -11,6 +11,7 @@ confinement: strict
 
 apps:
   parquet-explorer:
+    common-id: parquet-explorer
     command: bin/parquet-explorer
     plugs: [home, desktop, desktop-legacy, wayland, x11, opengl, removable-media]
     extensions: [gnome]
@@ -21,7 +22,7 @@ apps:
       DUCKDB_DISABLE_MEMORY_LIMIT: "1"
 
 parts:
-  parquet-viewer:
+  parquet-explorer:
     plugin: python
     source: .
     python-packages:

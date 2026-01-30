@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>parquet-explorer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Parquet Explorer</name>
+  <summary>Explore and view Parquet files with ease</summary>
+  <description>
+    <p>
+      Parquet Explorer is a lightweight PyQt6-based utility for data scientists and engineers 
+      to quickly open and inspect Apache Parquet files without needing a full-blown notebook environment.
+    </p>
+  </description>
+  <launchable type="desktop-id">parquet-explorer.desktop</launchable>
+  <releases>
+    <release version="0.1.0" date="2026-01-31" />
+  </releases>
+</component>
