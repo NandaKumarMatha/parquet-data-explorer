@@ -13,7 +13,6 @@ apps:
   parquet-explorer:
     common-id: parquet-explorer
     command: bin/parquet-explorer
-    desktop: snap/gui/parquet-explorer.desktop
     plugs: [home, desktop, desktop-legacy, wayland, x11, opengl, removable-media]
     extensions: [gnome]
     environment:
@@ -21,7 +20,7 @@ apps:
       PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/lib/python3.12/site-packages
 
 parts:
-  parquet-viewer:
+  parquet-explorer:
     plugin: python
     source: .
     python-packages:
