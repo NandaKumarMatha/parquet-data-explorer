@@ -18,8 +18,12 @@ apps:
     environment:
       # Ensure python can find site-packages
       PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/lib/python3.12/site-packages
-      # Disable DuckDB memory limit detection to avoid cgroup permission errors in snap
-      DUCKDB_DISABLE_MEMORY_LIMIT: "1"
+      # Disable DuckDB cgroup detection to avoid permission errors in snap
+      DUCKDB_DISABLE_CGROUP: "1"
+      # Prevent GIO from loading libproxy module which causes errors in snap
+      GIO_EXTRA_MODULES: ""
+      # Use Qt's native platform theme instead of portal-based dialogs
+      QT_QPA_PLATFORMTHEME: ""
 
 parts:
   parquet-explorer:
@@ -34,4 +38,3 @@ parts:
       - libpython3-stdlib
       - libpython3.12-minimal
       - libpython3.12-stdlib
-      - libproxy1v5
