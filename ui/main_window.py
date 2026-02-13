@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 import pandas as pd
-import duckdb
+
 import os
 from data.parquet_handler import load_parquet, save_parquet, get_metadata
 
@@ -84,7 +84,6 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(icon_path))
         self.setGeometry(100, 100, 1200, 800)
         self.df = pd.DataFrame()
-        self.con = duckdb.connect()
         self.filtered_df = self.df
         self.current_file_path = None
         self.proxy = QSortFilterProxyModel()
@@ -218,7 +217,6 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage("Loading...")
         self.df = load_parquet(file_name)
         self.original_df = self.df.copy()
-        self.con.register('df', self.df)
         self.filtered_df = self.df
         self.current_file_path = file_name
         self.update_table()
@@ -301,24 +299,18 @@ class MainWindow(QMainWindow):
         if not query:
             return
         try:
-            if query.upper().startswith("SELECT"):
-                result = self.con.execute(query).df()
-                self.df = result
-                self.filtered_df = self.df
-                self.update_table()
-            else:
-                self.con.execute(query)
-                # Refresh df if needed, but since registered, it should be updated
-                self.filtered_df = self.df
-                self.update_table()
+            # Use pandas query method for filtering
+            # Example: column_name > 100, column_name == 'value'
+            result = self.df.query(query)
+            self.filtered_df = result
+            self.update_table()
             self.status_bar.showMessage("Query executed")
         except Exception as e:
-            QMessageBox.warning(self, "Query Error", str(e))
+            QMessageBox.warning(self, "Query Error", f"Invalid pandas query: {str(e)}\n\nExample: column_name > 100 or column_name == 'value'")
 
     def reset_data(self):
         if self.original_df is not None:
             self.df = self.original_df.copy()
-            self.con.register('df', self.df)
             self.filtered_df = self.df
             self.update_table()
             self.search_edit.clear()
