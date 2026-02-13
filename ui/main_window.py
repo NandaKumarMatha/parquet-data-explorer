@@ -169,6 +169,7 @@ class MainWindow(QMainWindow):
 
     def create_query_widget(self):
         self.query_edit = QLineEdit()
+        self.query_edit.setPlaceholderText("Example: age > 25 or city == 'NY'")
         self.query_button = QPushButton("Execute")
         self.query_button.clicked.connect(self.execute_query)
         self.query_button.setMinimumWidth(80)
@@ -180,7 +181,7 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout()
         layout.addWidget(QLabel("Search:"))
         layout.addWidget(self.search_edit)
-        layout.addWidget(QLabel("SQL Query:"))
+        layout.addWidget(QLabel("Pandas Query:"))
         layout.addWidget(self.query_edit, 1)  # stretch
         layout.addWidget(self.query_button)
         self.reset_button = QPushButton("Clear")
