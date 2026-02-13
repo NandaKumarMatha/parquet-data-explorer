@@ -5,3 +5,11 @@ dist/
 build/
 *.spec
 sample.parquet
+*.egg-info/
+parts/
+stage/
+prime/
+*.snap
+credentials.txt
+.tox/
+.pytest_cache/
