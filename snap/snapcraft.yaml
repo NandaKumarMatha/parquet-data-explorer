@@ -22,6 +22,8 @@ apps:
       GIO_EXTRA_MODULES: ""
       # Use Qt's native platform theme instead of portal-based dialogs
       QT_QPA_PLATFORMTHEME: ""
+      # Suppress GTK accessibility module warnings
+      GTK_A11Y: none
 
 parts:
   parquet-explorer:
