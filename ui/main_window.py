@@ -5,6 +5,7 @@ import pandas as pd
 
 import os
 from data.parquet_handler import load_parquet, save_parquet, get_metadata
+from ui.visualization_widget import VisualizationWidget
 
 class CustomDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
@@ -163,9 +164,16 @@ class MainWindow(QMainWindow):
         self.table.selectAll()
 
     def create_table(self):
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
+
         self.table = QTableView()
-        self.setCentralWidget(self.table)
         self.table.setSortingEnabled(True)
+        
+        self.visualization_widget = VisualizationWidget()
+
+        self.tabs.addTab(self.table, "Data")
+        self.tabs.addTab(self.visualization_widget, "Visualizations")
 
     def create_query_widget(self):
         self.query_edit = QLineEdit()
@@ -204,8 +212,6 @@ class MainWindow(QMainWindow):
         self.stats_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.stats_dock)
 
-        self.tabifyDockWidget(self.query_dock, self.stats_dock)
-
     def filter_data(self):
         text = self.search_edit.text().lower()
         if not text:
@@ -239,6 +245,7 @@ class MainWindow(QMainWindow):
             self.table.setColumnWidth(col, min(self.table.columnWidth(col), max_col_width))
         self.row_col_label.setText(f"Rows: {len(self.filtered_df)}, Columns: {len(self.filtered_df.columns)}")
         self.update_stats()
+        self.visualization_widget.set_dataframe(self.filtered_df)
 
     def update_stats(self):
         if self.df.empty:
