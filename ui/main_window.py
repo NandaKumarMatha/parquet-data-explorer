@@ -212,8 +212,6 @@ class MainWindow(QMainWindow):
         self.stats_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.stats_dock)
 
-        self.tabifyDockWidget(self.query_dock, self.stats_dock)
-
     def filter_data(self):
         text = self.search_edit.text().lower()
         if not text:
