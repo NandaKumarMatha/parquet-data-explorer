@@ -1,3 +1,5 @@
+import os
+os.environ['QT_API'] = 'pyqt6'
 import sys
 from PyQt6.QtWidgets import QApplication
 from ui.main_window import MainWindow

@@ -1,10 +1,12 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
+import qdarkstyle # type: ignore
 import pandas as pd
+from ui.commands import EditCommand
 
 import os
-from data.parquet_handler import load_parquet, save_parquet, get_metadata
+from data.parquet_handler import load_parquet, save_parquet, get_metadata, get_row_count
 from ui.visualization_widget import VisualizationWidget
 
 class CustomDelegate(QStyledItemDelegate):
@@ -16,10 +18,11 @@ class CustomDelegate(QStyledItemDelegate):
             editor.setText(full_value)
 
 class DataFrameModel(QAbstractTableModel):
-    def __init__(self, df, main_df):
+    def __init__(self, df, main_df, undo_stack=None):
         super().__init__()
         self.df = df
         self.main_df = main_df
+        self.undo_stack = undo_stack
 
     def rowCount(self, parent):
         return len(self.df)
@@ -62,15 +65,29 @@ class DataFrameModel(QAbstractTableModel):
                     value = float(value)
                 elif dtype == 'object':
                     value = str(value)
-                # Add more if needed
-                self.main_df.loc[row_idx, col] = value
-                self.df.loc[row_idx, col] = value
-                self.dataChanged.emit(index, index)
-                return True
+                
+                # Capture old value for undo
+                old_value = self.df.iloc[index.row(), index.column()]
+                
+                if self.undo_stack:
+                    command = EditCommand(self, index, old_value, value)
+                    self.undo_stack.push(command)
+                    return True
+                else:
+                    return self.set_data_internal(index, value)
+
             except ValueError as e:
                 QMessageBox.warning(None, "Edit Error", f"Invalid value for {dtype}: {str(e)}")
                 return False
         return False
+
+    def set_data_internal(self, index, value):
+        row_idx = self.df.index[index.row()]
+        col = self.df.columns[index.column()]
+        self.main_df.loc[row_idx, col] = value
+        self.df.loc[row_idx, col] = value
+        self.dataChanged.emit(index, index)
+        return True
 
     def flags(self, index):
         return Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
@@ -89,6 +106,7 @@ class MainWindow(QMainWindow):
         self.current_file_path = None
         self.proxy = QSortFilterProxyModel()
         self.original_df = None
+        self.undo_stack = QUndoStack(self)
         self.create_table()
         self.create_query_widget()
         self.create_stats_widget()
@@ -96,6 +114,13 @@ class MainWindow(QMainWindow):
         self.status_bar = self.statusBar()
         self.row_col_label = QLabel()
         self.status_bar.addPermanentWidget(self.row_col_label)
+        
+        # Pagination controls
+        self.page_size = 1000
+        self.current_page = 1
+        self.total_rows = 0
+        self.create_pagination_controls()
+
         if os.path.exists('sample.parquet'):
             self.load_data('sample.parquet')
         self.status_bar.showMessage("Ready")
@@ -120,6 +145,17 @@ class MainWindow(QMainWindow):
         file_menu.addAction(export_action)
 
         edit_menu = menu_bar.addMenu("Edit")
+        
+        undo_action = self.undo_stack.createUndoAction(self, "Undo")
+        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        edit_menu.addAction(undo_action)
+
+        redo_action = self.undo_stack.createRedoAction(self, "Redo")
+        redo_action.setShortcut(QKeySequence.StandardKey.Redo)
+        edit_menu.addAction(redo_action)
+
+        edit_menu.addSeparator()
+
         copy_action = QAction("Copy", self)
         copy_action.setShortcut(QKeySequence.StandardKey.Copy)
         copy_action.triggered.connect(self.copy_selection)
@@ -140,8 +176,32 @@ class MainWindow(QMainWindow):
         self.stats_action.setCheckable(True)
         self.stats_action.setChecked(True)
         self.stats_action.triggered.connect(lambda: self.stats_dock.setVisible(self.stats_action.isChecked()))
-        self.stats_dock.visibilityChanged.connect(lambda visible: self.stats_action.setChecked(visible))
         view_menu.addAction(self.stats_action)
+
+        theme_menu = view_menu.addMenu("Theme")
+        
+        self.theme_group = QActionGroup(self)
+        
+        self.theme_group = QActionGroup(self)
+        self.theme_group.setExclusive(True)
+        
+        for theme_name in ["Auto", "Dark", "Light"]:
+            action = QAction(theme_name, self, checkable=True)
+            if theme_name == "Auto": action.setChecked(True)
+            action.triggered.connect(lambda checked, t=theme_name.lower(): self.change_theme(t))
+            theme_menu.addAction(action)
+            self.theme_group.addAction(action)
+
+    def change_theme(self, theme_name):
+        app = QApplication.instance()
+        if theme_name == "dark":
+            app.setStyleSheet(qdarkstyle.load_stylesheet())
+        elif theme_name == "light":
+            app.setStyleSheet("") # Reset to default (light)
+        else: # Auto
+            # Simple logic: default to light or check system (advanced)
+            # For now, just reset
+            app.setStyleSheet("")
 
     def copy_selection(self):
         selection = self.table.selectionModel().selectedIndexes()
@@ -211,6 +271,62 @@ class MainWindow(QMainWindow):
         # Fix the dock position - allow closing but not moving/floating
         self.stats_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.stats_dock)
+        # self.tabifyDockWidget(self.query_dock, self.stats_dock)
+
+    def create_pagination_controls(self):
+        # Container for all status bar controls
+        container = QWidget()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 10, 0)
+        
+        # Page Size Selector
+        layout.addWidget(QLabel("Page Size:"))
+        self.page_size_combo = QComboBox()
+        self.page_size_combo.addItems(["100", "1000", "5000", "10000"])
+        self.page_size_combo.setCurrentText(str(self.page_size))
+        self.page_size_combo.currentTextChanged.connect(lambda text: self.set_page_size(int(text)))
+        layout.addWidget(self.page_size_combo)
+        
+        # Spacer
+        layout.addSpacing(20)
+
+        # Navigation
+        self.prev_btn = QPushButton("<")
+        self.prev_btn.setFixedWidth(30)
+        self.prev_btn.clicked.connect(lambda: self.change_page(-1))
+        
+        self.page_label = QLabel("Page 1")
+        
+        self.next_btn = QPushButton(">")
+        self.next_btn.setFixedWidth(30)
+        self.next_btn.clicked.connect(lambda: self.change_page(1))
+        
+        layout.addWidget(self.prev_btn)
+        layout.addWidget(self.page_label)
+        layout.addWidget(self.next_btn)
+        container.setLayout(layout)
+        
+        self.status_bar.addPermanentWidget(container)
+        self.update_pagination_controls()
+
+    def set_page_size(self, size):
+        self.page_size = size
+        self.current_page = 1
+        if self.current_file_path:
+            self.load_data(self.current_file_path, reset_page=False)
+
+    def change_page(self, delta):
+        self.current_page += delta
+        if self.current_file_path:
+            self.load_data(self.current_file_path, reset_page=False)
+
+    def update_pagination_controls(self):
+        import math
+        total_pages = math.ceil(self.total_rows / self.page_size) if self.total_rows > 0 else 1
+        
+        self.prev_btn.setEnabled(self.current_page > 1)
+        self.next_btn.setEnabled(self.current_page < total_pages)
+        self.page_label.setText(f"Page {self.current_page} / {total_pages}")
 
     def filter_data(self):
         text = self.search_edit.text().lower()
@@ -225,17 +341,30 @@ class MainWindow(QMainWindow):
         if file_name:
             self.load_data(file_name)
 
-    def load_data(self, file_name):
+    def load_data(self, file_name, reset_page=True):
         self.status_bar.showMessage("Loading...")
-        self.df = load_parquet(file_name)
-        self.original_df = self.df.copy()
-        self.filtered_df = self.df
-        self.current_file_path = file_name
-        self.update_table()
-        self.status_bar.showMessage(f"Loaded {len(self.df)} rows, {len(self.df.columns)} columns")
+        try:
+            self.total_rows = get_row_count(file_name)
+            
+            if reset_page:
+                self.current_page = 1
+            
+            offset = (self.current_page - 1) * self.page_size
+            limit = self.page_size
+            
+            self.df = load_parquet(file_name, offset=offset, limit=limit)
+            self.original_df = self.df.copy()
+            self.filtered_df = self.df
+            self.current_file_path = file_name
+            self.update_table()
+            self.update_pagination_controls()
+            self.status_bar.showMessage(f"Loaded {len(self.df)} rows (Total: {self.total_rows})")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load file: {str(e)}")
+            self.status_bar.showMessage("Error loading file")
 
     def update_table(self):
-        self.model = DataFrameModel(self.filtered_df, self.df)
+        self.model = DataFrameModel(self.filtered_df, self.df, self.undo_stack)
         self.proxy.setSourceModel(self.model)
         self.table.setModel(self.proxy)
         self.table.setItemDelegate(CustomDelegate())
