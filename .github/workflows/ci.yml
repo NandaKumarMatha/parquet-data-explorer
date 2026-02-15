@@ -30,7 +30,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: parquet-explorer-windows
-        path: dist/main.exe
+        path: dist/ParquetViewer.exe
 
   test-linux:
     runs-on: ubuntu-latest
@@ -55,4 +55,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: parquet-explorer-linux
-        path: dist/main
+        path: dist/ParquetViewer

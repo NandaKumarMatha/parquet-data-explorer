@@ -77,7 +77,7 @@ class DataFrameModel(QAbstractTableModel):
                     return self.set_data_internal(index, value)
 
             except ValueError as e:
-                QMessageBox.warning(None, "Edit Error", f"Invalid value for {dtype}: {str(e)}")
+                QMessageBox.warning(self.window(), "Edit Error", f"Invalid value for {dtype}: {str(e)}")
                 return False
         return False
 
