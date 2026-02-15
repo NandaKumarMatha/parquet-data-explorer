@@ -4,6 +4,7 @@ from PyQt6.QtGui import *
 import pandas as pd
 import duckdb
 import os
+from utils.path_helper import get_resource_path
 from data.parquet_handler import load_parquet, save_parquet, get_metadata
 
 class CustomDelegate(QStyledItemDelegate):
@@ -67,7 +68,7 @@ class DataFrameModel(QAbstractTableModel):
                 self.dataChanged.emit(index, index)
                 return True
             except ValueError as e:
-                QMessageBox.warning(None, "Edit Error", f"Invalid value for {dtype}: {str(e)}")
+                QMessageBox.warning(self.window(), "Edit Error", f"Invalid value for {dtype}: {str(e)}")
                 return False
         return False
 
@@ -78,7 +79,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Parquet Data Explorer")
-        self.setWindowIcon(QIcon("icon.svg"))
+        self.setWindowIcon(QIcon(get_resource_path("fav.ico")))
         self.setGeometry(100, 100, 1200, 800)
         self.df = pd.DataFrame()
         self.con = duckdb.connect()
