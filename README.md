@@ -1,5 +1,7 @@
 # Parquet Data Explorer
 
+[![parquet-explorer](https://snapcraft.io/parquet-explorer/badge.svg)](https://snapcraft.io/parquet-explorer)
+[![parquet-explorer](https://snapcraft.io/parquet-explorer/trending.svg?name=0)](https://snapcraft.io/parquet-explorer)
 [![CI](https://github.com/NandaKumarMatha/parquet-data-explorer/actions/workflows/ci.yml/badge.svg)](https://github.com/NandaKumarMatha/parquet-data-explorer/actions/workflows/ci.yml)
 
 A cross-platform desktop application for viewing, editing, and manipulating Parquet files.
