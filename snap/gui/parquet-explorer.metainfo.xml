@@ -11,6 +11,14 @@
       to quickly open and inspect Apache Parquet files without needing a full-blown notebook environment.
     </p>
   </description>
+  <url type="homepage">https://github.com/NandaKumarMatha/parquet-data-explorer</url>
+  <url type="bugtracker">https://github.com/NandaKumarMatha/parquet-data-explorer/issues</url>
+  <url type="vcs-browser">https://github.com/NandaKumarMatha/parquet-data-explorer</url>
+  <categories>
+    <category>Development</category>
+    <category>Utility</category>
+    <category>Database</category>
+  </categories>
   <launchable type="desktop-id">parquet-explorer.desktop</launchable>
   <releases>
     <release version="0.1.0" date="2026-01-31" />
