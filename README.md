@@ -11,8 +11,8 @@ This is an open-source project. Contributions welcome.
 ## Features
 - Open and view Parquet files
 - Display column metadata with tooltips
-- Edit data inline or via SQL queries/updates
-- Sort, filter, and query data using DuckDB SQL
+- Edit data inline or via pandas queries
+- Sort, filter, and query data using pandas expressions
 - Search rows by text
 - View column statistics (mean, min, max, etc.)
 - Convert to other formats (CSV, JSON, Excel)
@@ -56,7 +56,7 @@ Contributions are welcome! Please:
 - File operations (open, save, new Parquet files)
 - Data viewing with sortable table
 - Inline data editing with validation
-- SQL querying using DuckDB
+- Data filtering using pandas query expressions
 - Real-time search and filtering
 - Column statistics panel
 - Export to CSV, JSON, Excel

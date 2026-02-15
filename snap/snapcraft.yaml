@@ -23,6 +23,12 @@ apps:
     environment:
       # Ensure python can find site-packages
       PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/lib/python3.12/site-packages
+      # Prevent GIO from loading libproxy module which causes errors in snap
+      GIO_EXTRA_MODULES: ""
+      # Use Qt's native platform theme instead of portal-based dialogs
+      QT_QPA_PLATFORMTHEME: ""
+      # Suppress GTK accessibility module warnings
+      GTK_A11Y: none
 
 parts:
   parquet-explorer:
@@ -32,7 +38,6 @@ parts:
       - PyQt6
       - pyarrow
       - pandas
-      - duckdb
     stage-packages:
       - libpython3-stdlib
       - libpython3.12-minimal

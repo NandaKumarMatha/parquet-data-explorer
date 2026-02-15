@@ -9,7 +9,6 @@ setup(
         "PyQt6>=6.0.0",
         "pyarrow>=10.0.0",
         "pandas>=1.5.0",
-        "duckdb>=0.8.0",
     ],
     entry_points={
         "console_scripts": [
