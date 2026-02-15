@@ -18,11 +18,11 @@ class CustomDelegate(QStyledItemDelegate):
             editor.setText(full_value)
 
 class DataFrameModel(QAbstractTableModel):
-    def __init__(self, df, main_df, undo_stack=None):
+    def __init__(self, df, main_df, main_window=None):
         super().__init__()
         self.df = df
         self.main_df = main_df
-        self.undo_stack = undo_stack
+        self.main_window = main_window
 
     def rowCount(self, parent):
         return len(self.df)
@@ -69,9 +69,9 @@ class DataFrameModel(QAbstractTableModel):
                 # Capture old value for undo
                 old_value = self.df.iloc[index.row(), index.column()]
                 
-                if self.undo_stack:
-                    command = EditCommand(self, index, old_value, value)
-                    self.undo_stack.push(command)
+                if self.main_window and self.main_window.undo_stack:
+                    command = EditCommand(self.main_window, index, old_value, value)
+                    self.main_window.undo_stack.push(command)
                     return True
                 else:
                     return self.set_data_internal(index, value)
@@ -356,6 +356,7 @@ class MainWindow(QMainWindow):
             self.original_df = self.df.copy()
             self.filtered_df = self.df
             self.current_file_path = file_name
+            self.undo_stack.clear() # Clear undo stack on new data load
             self.update_table()
             self.update_pagination_controls()
             self.status_bar.showMessage(f"Loaded {len(self.df)} rows (Total: {self.total_rows})")
@@ -363,8 +364,25 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to load file: {str(e)}")
             self.status_bar.showMessage("Error loading file")
 
+    def refresh_view_for_cell(self, row_idx, col_name):
+        # row_idx is the DataFrame Index Label, not position
+        # col_name is column name
+        try:
+            # Find the positional index in the CURRENT filtered_df
+            if row_idx not in self.filtered_df.index:
+                return 
+            
+            row_pos = self.filtered_df.index.get_loc(row_idx)
+            col_pos = self.filtered_df.columns.get_loc(col_name)
+            
+            # Emit dataChanged for this cell in the source model
+            index = self.model.index(row_pos, col_pos)
+            self.model.dataChanged.emit(index, index)
+        except Exception as e:
+            print(f"Error refreshing view: {e}")
+
     def update_table(self):
-        self.model = DataFrameModel(self.filtered_df, self.df, self.undo_stack)
+        self.model = DataFrameModel(self.filtered_df, self.df, self)
         self.proxy.setSourceModel(self.model)
         self.table.setModel(self.proxy)
         self.table.setItemDelegate(CustomDelegate())
