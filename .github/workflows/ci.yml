@@ -25,7 +25,7 @@ jobs:
     - name: Build executable
       run: |
         pip install pyinstaller
-        pyinstaller --onefile --windowed main.py
+        pyinstaller --onefile --windowed -n ParquetViewer main.py
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -50,7 +50,7 @@ jobs:
     - name: Build executable
       run: |
         pip install pyinstaller
-        pyinstaller --onefile main.py
+        pyinstaller --onefile -n ParquetViewer main.py
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
