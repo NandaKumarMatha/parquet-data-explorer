@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt
 import matplotlib
 matplotlib.use('Qt5Agg') # Use Qt backend, works for Qt6 too usually, or try 'QtAgg' if available in newer versions
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
@@ -22,36 +22,69 @@ class VisualizationWidget(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
 
-        # Controls
+        # Controls panel with styling
         controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(10)
+        controls_layout.setContentsMargins(8, 8, 8, 8)
+        
+        chart_label = QLabel("Chart Type:")
+        chart_label.setStyleSheet("font-weight: 600; font-size: 11px;")
+        controls_layout.addWidget(chart_label)
         
         self.chart_type_combo = QComboBox()
         self.chart_type_combo.addItems(["Histogram", "Scatter Plot", "Bar Chart", "Line Chart", "Box Plot", 
                                         "Pie Chart", "Area Chart", "Hexbin Plot", "Violin Plot", "Correlation Heatmap",
                                         "Geo Scatter Plot", "Choropleth Map"])
         self.chart_type_combo.currentTextChanged.connect(self.update_column_selectors)
-        controls_layout.addWidget(QLabel("Chart Type:"))
+        self.chart_type_combo.setMinimumWidth(120)
         controls_layout.addWidget(self.chart_type_combo)
 
+        x_label = QLabel("X Column:")
+        x_label.setStyleSheet("font-weight: 600; font-size: 11px; margin-left: 10px;")
+        controls_layout.addWidget(x_label)
+        
         self.x_col_combo = QComboBox()
-        controls_layout.addWidget(QLabel("X Column:"))
+        self.x_col_combo.setMinimumWidth(100)
         controls_layout.addWidget(self.x_col_combo)
 
         self.y_col_combo = QComboBox()
+        self.y_col_combo.setMinimumWidth(100)
         self.y_label = QLabel("Y Column:")
+        self.y_label.setStyleSheet("font-weight: 600; font-size: 11px; margin-left: 10px;")
         controls_layout.addWidget(self.y_label)
         controls_layout.addWidget(self.y_col_combo)
 
-        self.plot_button = QPushButton("Plot")
+        self.plot_button = QPushButton("▶ Plot")
+        self.plot_button.setMinimumWidth(80)
+        self.plot_button.setStyleSheet("""
+            QPushButton {
+                background-color: #3d7efb;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: 600;
+                font-size: 11px;
+                min-height: 24px;
+            }
+            QPushButton:hover {
+                background-color: #4a8bff;
+            }
+            QPushButton:pressed {
+                background-color: #2a5fd4;
+            }
+        """)
         self.plot_button.clicked.connect(self.plot_chart)
         controls_layout.addWidget(self.plot_button)
 
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
 
-        # Chart area
-        self.figure = Figure()
+        # Chart area with dark theme support
+        self.figure = Figure(facecolor='#1e1e1e', edgecolor='#3d3d3d')
         self.canvas = FigureCanvas(self.figure)
         layout.addWidget(self.canvas)
 
@@ -106,22 +139,34 @@ class VisualizationWidget(QWidget):
         y_col = self.y_col_combo.currentText()
 
         self.figure.clear()
+        # Update figure colors for dark theme
+        self.figure.set_facecolor('#1e1e1e')
         ax = self.figure.add_subplot(111)
+        ax.set_facecolor('#252525')
+        ax.spines['bottom'].set_color('#3d3d3d')
+        ax.spines['top'].set_color('#3d3d3d')
+        ax.spines['right'].set_color('#3d3d3d')
+        ax.spines['left'].set_color('#3d3d3d')
+        ax.tick_params(colors='#e0e0e0', labelsize=9)
+        ax.xaxis.label.set_color('#e0e0e0')
+        ax.yaxis.label.set_color('#e0e0e0')
+        ax.title.set_color('#e0e0e0')
+        ax.grid(True, color='#3d3d3d', linestyle='--', alpha=0.3)
 
         try:
             if chart_type == "Histogram":
                 if not pd.api.types.is_numeric_dtype(self.df[x_col]):
                      raise ValueError(f"Column '{x_col}' must be numeric for Histogram.")
-                ax.hist(self.df[x_col].dropna(), bins=20)
-                ax.set_title(f"Histogram of {x_col}")
+                ax.hist(self.df[x_col].dropna(), bins=20, color='#3d7efb', edgecolor='#e0e0e0', alpha=0.7)
+                ax.set_title(f"Histogram of {x_col}", fontsize=12, fontweight='bold')
                 ax.set_xlabel(x_col)
                 ax.set_ylabel("Frequency")
 
             elif chart_type == "Scatter Plot":
                 if not pd.api.types.is_numeric_dtype(self.df[x_col]) or not pd.api.types.is_numeric_dtype(self.df[y_col]):
                     raise ValueError("Both columns must be numeric for Scatter Plot.")
-                ax.scatter(self.df[x_col], self.df[y_col], alpha=0.5)
-                ax.set_title(f"{x_col} vs {y_col}")
+                ax.scatter(self.df[x_col], self.df[y_col], alpha=0.6, s=40, color='#3d7efb', edgecolors='#e0e0e0', linewidth=0.5)
+                ax.set_title(f"{x_col} vs {y_col}", fontsize=12, fontweight='bold')
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
             
@@ -134,8 +179,8 @@ class VisualizationWidget(QWidget):
                 else:
                     plot_df = self.df
                 
-                ax.bar(plot_df[x_col].astype(str), plot_df[y_col])
-                ax.set_title(f"{y_col} by {x_col}")
+                ax.bar(plot_df[x_col].astype(str), plot_df[y_col], color='#3d7efb', edgecolor='#e0e0e0', alpha=0.8)
+                ax.set_title(f"{y_col} by {x_col}", fontsize=12, fontweight='bold')
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
                 # Rotate x labels if they are strings
@@ -145,13 +190,18 @@ class VisualizationWidget(QWidget):
             elif chart_type == "Line Chart":
                 # Sort by X usually makes sense for line charts
                 plot_df = self.df.sort_values(by=x_col)
-                ax.plot(plot_df[x_col], plot_df[y_col])
-                ax.set_title(f"{y_col} over {x_col}")
+                ax.plot(plot_df[x_col], plot_df[y_col], color='#3d7efb', linewidth=2, marker='o', markersize=4)
+                ax.set_title(f"{y_col} over {x_col}", fontsize=12, fontweight='bold')
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
 
-                ax.boxplot(self.df[x_col].dropna())
-                ax.set_title(f"Box Plot of {x_col}")
+            elif chart_type == "Box Plot":
+                ax.boxplot(self.df[x_col].dropna(), patch_artist=True,
+                          boxprops=dict(facecolor='#3d7efb', alpha=0.7),
+                          medianprops=dict(color='#e0e0e0', linewidth=2),
+                          whiskerprops=dict(color='#3d7efb'),
+                          capprops=dict(color='#3d7efb'))
+                ax.set_title(f"Box Plot of {x_col}", fontsize=12, fontweight='bold')
                 ax.set_ylabel(x_col)
 
             elif chart_type == "Pie Chart":
@@ -160,16 +210,17 @@ class VisualizationWidget(QWidget):
                 if len(counts) > 20:
                      QMessageBox.warning(self, "Warning", "Too many categories for Pie Chart. Showing top 10.")
                      counts = counts.head(10)
-                ax.pie(counts, labels=counts.index, autopct='%1.1f%%')
-                ax.set_title(f"Distribution of {x_col}")
+                colors = plt.cm.Set3(range(len(counts)))
+                ax.pie(counts, labels=counts.index, autopct='%1.1f%%', colors=['#3d7efb', '#4a8bff', '#2a5fd4', '#5a9bff', '#1a4fcb'])
+                ax.set_title(f"Distribution of {x_col}", fontsize=12, fontweight='bold')
 
             elif chart_type == "Area Chart":
                 if not pd.api.types.is_numeric_dtype(self.df[y_col]):
                     raise ValueError(f"Column '{y_col}' must be numeric for Area Chart.")
                 plot_df = self.df.sort_values(by=x_col)
-                ax.fill_between(plot_df[x_col], plot_df[y_col], alpha=0.5)
-                ax.plot(plot_df[x_col], plot_df[y_col])
-                ax.set_title(f"{y_col} Area over {x_col}")
+                ax.fill_between(range(len(plot_df)), plot_df[y_col], alpha=0.6, color='#3d7efb')
+                ax.plot(range(len(plot_df)), plot_df[y_col], color='#4a8bff', linewidth=2)
+                ax.set_title(f"{y_col} Area over {x_col}", fontsize=12, fontweight='bold')
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
 
@@ -178,7 +229,7 @@ class VisualizationWidget(QWidget):
                     raise ValueError("Both columns must be numeric for Hexbin Plot.")
                 hb = ax.hexbin(self.df[x_col], self.df[y_col], gridsize=20, cmap='Blues')
                 self.figure.colorbar(hb, ax=ax, label='Count')
-                ax.set_title(f"Hexbin of {x_col} vs {y_col}")
+                ax.set_title(f"Hexbin of {x_col} vs {y_col}", fontsize=12, fontweight='bold')
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
 
@@ -203,10 +254,13 @@ class VisualizationWidget(QWidget):
                 if not data_to_plot:
                     raise ValueError("No data to plot.")
 
-                ax.violinplot(data_to_plot, showmeans=True)
+                parts = ax.violinplot(data_to_plot, showmeans=True, widths=0.7)
+                for pc in parts['bodies']:
+                    pc.set_facecolor('#3d7efb')
+                    pc.set_alpha(0.7)
                 ax.set_xticks(range(1, len(labels) + 1))
                 ax.set_xticklabels(labels, rotation=45)
-                ax.set_title(f"Violin Plot of {y_col} by {x_col}")
+                ax.set_title(f"Violin Plot of {y_col} by {x_col}", fontsize=12, fontweight='bold')
                 ax.set_ylabel(y_col)
                 ax.set_xlabel(x_col)
 
@@ -221,27 +275,27 @@ class VisualizationWidget(QWidget):
                 ax.set_yticks(range(len(corr.columns)))
                 ax.set_xticklabels(corr.columns, rotation=45)
                 ax.set_yticklabels(corr.columns)
-                ax.set_title("Correlation Heatmap")
+                ax.set_title("Correlation Heatmap", fontsize=12, fontweight='bold')
                 # Add annotations (limit if too large)
                 if len(corr.columns) < 15:
                     for i in range(len(corr.columns)):
                         for j in range(len(corr.columns)):
                             text = ax.text(j, i, f"{corr.iloc[i, j]:.2f}",
-                                           ha="center", va="center", color="black", fontsize=8)
+                                           ha="center", va="center", color="#e0e0e0", fontsize=8)
 
             elif chart_type == "Geo Scatter Plot":
                 if not pd.api.types.is_numeric_dtype(self.df[x_col]) or not pd.api.types.is_numeric_dtype(self.df[y_col]):
                     raise ValueError("Longitude (X) and Latitude (Y) columns must be numeric.")
                 
                 # Scatter plot for map coordinates
-                sc = ax.scatter(self.df[x_col], self.df[y_col], alpha=0.6, s=10, c='steelblue')
-                ax.set_title(f"Geo Scatter Plot: {y_col} vs {x_col}")
+                sc = ax.scatter(self.df[x_col], self.df[y_col], alpha=0.6, s=20, c='#3d7efb', edgecolors='#e0e0e0', linewidth=0.5)
+                ax.set_title(f"Geo Scatter Plot: {y_col} vs {x_col}", fontsize=12, fontweight='bold')
                 ax.set_xlabel(f"Longitude ({x_col})")
                 ax.set_ylabel(f"Latitude ({y_col})")
                 
                 # Set aspect ratio to 'equal' for correct map projection approximation
                 ax.set_aspect('equal')
-                ax.grid(True, linestyle='--', alpha=0.5)
+                ax.grid(True, linestyle='--', alpha=0.3, color='#3d3d3d')
 
             elif chart_type == "Choropleth Map":
                 # Load GeoJSON
@@ -277,7 +331,7 @@ class VisualizationWidget(QWidget):
                     if val is not None:
                         color = cmap(norm(val))
                     else:
-                        color = (0.9, 0.9, 0.9, 1.0) # Grey for no data
+                        color = (0.3, 0.3, 0.3, 1.0) # Dark grey for no data
 
                     # Handle Polygon and MultiPolygon
                     geom_type = feature['geometry']['type']
@@ -294,15 +348,16 @@ class VisualizationWidget(QWidget):
                             colors.append(color)
 
                 # Create PatchCollection
-                p = PatchCollection(patches, facecolors=colors, edgecolors='white', linewidths=0.5)
+                p = PatchCollection(patches, facecolors=colors, edgecolors='#454545', linewidths=0.5)
                 ax.add_collection(p)
                 
                 # Create colorbar
                 sm = cm.ScalarMappable(norm=norm, cmap=cmap)
                 sm.set_array([])
-                self.figure.colorbar(sm, ax=ax, label=y_col)
+                cbar = self.figure.colorbar(sm, ax=ax, label=y_col)
+                cbar.ax.tick_params(colors='#e0e0e0')
 
-                ax.set_title(f"Choropleth Map: {y_col} by {x_col}")
+                ax.set_title(f"Choropleth Map: {y_col} by {x_col}", fontsize=12, fontweight='bold')
                 ax.autoscale_view()
                 ax.set_aspect('equal')
                 ax.axis('off')

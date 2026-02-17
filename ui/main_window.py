@@ -4,18 +4,82 @@ from PyQt6.QtGui import *
 import qdarkstyle # type: ignore
 import pandas as pd
 from ui.commands import EditCommand
+from ui.styles import get_dark_stylesheet, get_light_stylesheet
 
 import os
 from data.parquet_handler import load_parquet, save_parquet, get_metadata, get_row_count
 from ui.visualization_widget import VisualizationWidget
 
+class StyledComboBox(QComboBox):
+    """Custom combo box with visible dropdown arrow indicator"""
+    def paintEvent(self, event):
+        """Paint the combo box with a visible dropdown arrow"""
+        super().paintEvent(event)
+        # The dropdown is already drawn by stylesheet, this just ensures visibility
+        
 class CustomDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        """Custom painting for table cells with improved styling"""
+        # Draw background based on alternating rows
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, QColor("#3d7efb"))
+            text_color = QColor("white")
+        else:
+            if index.row() % 2 == 0:
+                painter.fillRect(option.rect, QColor("#252525"))
+            else:
+                painter.fillRect(option.rect, QColor("#1a1a1a"))
+            text_color = QColor("#e0e0e0")
+        
+        # Draw text
+        painter.setPen(text_color)
+        font = option.font
+        font.setPointSize(9)
+        painter.setFont(font)
+        
+        # Draw cell text with proper padding
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        margin = 6
+        text_rect = option.rect.adjusted(margin, margin, -margin, -margin)
+        painter.drawText(text_rect, Qt.TextFlag.TextDontClip | Qt.AlignmentFlag.AlignVCenter, text)
+        
+        # Draw subtle cell border
+        painter.setPen(QPen(QColor("#3d3d3d"), 1, Qt.PenStyle.SolidLine))
+        painter.drawRect(option.rect.adjusted(0, 0, -1, -1))
+    
+    def createEditor(self, parent, option, index):
+        """Create editor widget with better styling"""
+        editor = QLineEdit(parent)
+        editor.setStyleSheet("""
+            QLineEdit {
+                background-color: #2d2d2d;
+                color: #ffffff;
+                border: 2px solid #3d7efb;
+                border-radius: 3px;
+                padding: 4px 6px;
+                font-size: 10px;
+                font-weight: 500;
+            }
+            QLineEdit:focus {
+                background-color: #353535;
+                border: 2px solid #4a8bff;
+            }
+        """)
+        return editor
+    
     def setEditorData(self, editor, index):
+        """Set editor data with full text for editing"""
         if isinstance(editor, QLineEdit):
             # Get full text for editing
             source_index = index.model().mapToSource(index)
             full_value = str(source_index.model().df.iloc[source_index.row(), source_index.column()])
             editor.setText(full_value)
+            editor.selectAll()  # Select all text for convenience
+    
+    def setModelData(self, editor, model, index):
+        """Set model data after editing"""
+        if isinstance(editor, QLineEdit):
+            model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
 
 class DataFrameModel(QAbstractTableModel):
     def __init__(self, df, main_df, main_window=None):
@@ -113,6 +177,7 @@ class MainWindow(QMainWindow):
         self.create_menu()
         self.status_bar = self.statusBar()
         self.row_col_label = QLabel()
+        self.row_col_label.setStyleSheet("font-weight: 600; font-size: 11px; padding: 4px 10px;")
         self.status_bar.addPermanentWidget(self.row_col_label)
         
         # Pagination controls
@@ -120,6 +185,10 @@ class MainWindow(QMainWindow):
         self.current_page = 1
         self.total_rows = 0
         self.create_pagination_controls()
+
+        # Apply modern dark theme by default
+        app = QApplication.instance()
+        app.setStyleSheet(get_dark_stylesheet())
 
         if os.path.exists('sample.parquet'):
             self.load_data('sample.parquet')
@@ -195,13 +264,12 @@ class MainWindow(QMainWindow):
     def change_theme(self, theme_name):
         app = QApplication.instance()
         if theme_name == "dark":
-            app.setStyleSheet(qdarkstyle.load_stylesheet())
+            app.setStyleSheet(get_dark_stylesheet())
         elif theme_name == "light":
-            app.setStyleSheet("") # Reset to default (light)
+            app.setStyleSheet(get_light_stylesheet())
         else: # Auto
-            # Simple logic: default to light or check system (advanced)
-            # For now, just reset
-            app.setStyleSheet("")
+            # Default to dark theme for modern appearance
+            app.setStyleSheet(get_dark_stylesheet())
 
     def copy_selection(self):
         selection = self.table.selectionModel().selectedIndexes()
@@ -229,6 +297,28 @@ class MainWindow(QMainWindow):
 
         self.table = QTableView()
         self.table.setSortingEnabled(True)
+        self.table.setAlternatingRowColors(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setShowGrid(True)
+        self.table.setGridStyle(Qt.PenStyle.SolidLine)
+        self.table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        
+        # Improve margins and spacing
+        self.table.verticalHeader().setDefaultSectionSize(32)
+        self.table.horizontalHeader().setDefaultSectionSize(100)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        
+        # Better row selection styling
+        self.table.setStyleSheet("""
+            QTableView {
+                gridline-color: #3d3d3d;
+            }
+            QTableView::item:selected {
+                background-color: #3d7efb;
+                color: white;
+            }
+        """)
         
         self.visualization_widget = VisualizationWidget()
 
@@ -277,28 +367,34 @@ class MainWindow(QMainWindow):
         # Container for all status bar controls
         container = QWidget()
         layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 10, 0)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(12)
         
         # Page Size Selector
-        layout.addWidget(QLabel("Page Size:"))
+        size_label = QLabel("Page Size:")
+        size_label.setStyleSheet("font-weight: 600; font-size: 11px;")
+        layout.addWidget(size_label)
+        
         self.page_size_combo = QComboBox()
         self.page_size_combo.addItems(["100", "1000", "5000", "10000"])
         self.page_size_combo.setCurrentText(str(self.page_size))
         self.page_size_combo.currentTextChanged.connect(lambda text: self.set_page_size(int(text)))
+        self.page_size_combo.setMinimumWidth(80)
         layout.addWidget(self.page_size_combo)
         
         # Spacer
         layout.addSpacing(20)
 
         # Navigation
-        self.prev_btn = QPushButton("<")
-        self.prev_btn.setFixedWidth(30)
+        self.prev_btn = QPushButton("◀ Prev")
+        self.prev_btn.setMinimumWidth(70)
         self.prev_btn.clicked.connect(lambda: self.change_page(-1))
         
         self.page_label = QLabel("Page 1")
+        self.page_label.setStyleSheet("font-weight: 600; font-size: 11px; min-width: 80px; text-align: center;")
         
-        self.next_btn = QPushButton(">")
-        self.next_btn.setFixedWidth(30)
+        self.next_btn = QPushButton("Next ▶")
+        self.next_btn.setMinimumWidth(70)
         self.next_btn.clicked.connect(lambda: self.change_page(1))
         
         layout.addWidget(self.prev_btn)
