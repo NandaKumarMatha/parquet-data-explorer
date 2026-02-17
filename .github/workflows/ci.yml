@@ -2,15 +2,17 @@ name: CI/CD
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, main ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, main ]
 
 jobs:
   test-windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -25,7 +27,7 @@ jobs:
     - name: Build executable
       run: |
         pip install pyinstaller
-        pyinstaller --onefile --windowed -n ParquetViewer main.py
+        pyinstaller main.spec
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -35,7 +37,9 @@ jobs:
   test-linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Set up Python
       uses: actions/setup-python@v4
       with:

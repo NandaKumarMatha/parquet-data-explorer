@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Parquet Explorer
-Exec=parquet-explorer
-Icon=${SNAP}/meta/gui/fav.ico
+Exec=${SNAP}/bin/parquet-explorer
+Icon=${SNAP}/meta/gui/icon.png
 Type=Application
 Categories=Development;Utility;Database;
 Comment=View and explore Parquet files

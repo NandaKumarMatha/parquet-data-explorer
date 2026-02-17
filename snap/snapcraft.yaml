@@ -12,7 +12,7 @@ license: MIT
 website: https://github.com/NandaKumarMatha/parquet-data-explorer
 source-code: https://github.com/NandaKumarMatha/parquet-data-explorer
 issues: https://github.com/NandaKumarMatha/parquet-data-explorer/issues
-icon: snap/gui/fav.ico
+icon: snap/gui/icon.png
 
 apps:
   parquet-explorer:
