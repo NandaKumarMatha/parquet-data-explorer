@@ -1,8 +1,9 @@
 [Desktop Entry]
 Name=Parquet Explorer
-Exec=${SNAP}/bin/parquet-explorer
-Icon=${SNAP}/meta/gui/icon.png
+Exec=parquet-explorer
+Icon=application-x-parquet
 Type=Application
 Categories=Development;Utility;Database;
 Comment=View and explore Parquet files
 Terminal=false
+StartupNotify=true
