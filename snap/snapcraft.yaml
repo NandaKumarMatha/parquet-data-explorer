@@ -38,6 +38,8 @@ parts:
       - PyQt6
       - pyarrow
       - pandas
+      - qdarkstyle
+      - matplotlib
     stage-packages:
       - libpython3-stdlib
       - libpython3.12-minimal
