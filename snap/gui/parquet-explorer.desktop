@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Parquet Explorer
-Exec=${SNAP}/bin/parquet-explorer %F
+Exec=parquet-explorer %F
 Icon=${SNAP}/meta/gui/icon.png
 Type=Application
 Categories=Development;Utility;Database;
