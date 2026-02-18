@@ -18,7 +18,7 @@ apps:
   parquet-explorer:
     common-id: parquet-explorer
     command: bin/parquet-explorer
-    # desktop: gui/parquet-explorer.desktop
+    desktop: gui/parquet-explorer.desktop
     plugs: [home, desktop, desktop-legacy, wayland, x11, opengl, removable-media]
     extensions: [gnome]
     environment:
