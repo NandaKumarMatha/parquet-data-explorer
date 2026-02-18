@@ -9,7 +9,12 @@ from utils.path_helper import get_resource_path
 def main():
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(get_resource_path("fav.ico")))
-    window = MainWindow()
+    
+    file_path = None
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1]
+        
+    window = MainWindow(file_path)
     window.show()
     sys.exit(app.exec())
 

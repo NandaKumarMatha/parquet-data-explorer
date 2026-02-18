@@ -93,7 +93,7 @@ class DataFrameModel(QAbstractTableModel):
         return Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, file_path=None):
         super().__init__()
         self.setWindowTitle("Parquet Data Explorer")
         # Use absolute path for icon to work in snap environments
@@ -121,7 +121,9 @@ class MainWindow(QMainWindow):
         self.total_rows = 0
         self.create_pagination_controls()
 
-        if os.path.exists('sample.parquet'):
+        if file_path and os.path.exists(file_path):
+            self.load_data(file_path)
+        elif os.path.exists('sample.parquet'):
             self.load_data('sample.parquet')
         self.status_bar.showMessage("Ready")
 
