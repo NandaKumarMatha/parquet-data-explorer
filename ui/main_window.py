@@ -141,7 +141,7 @@ class DataFrameModel(QAbstractTableModel):
 class MainWindow(QMainWindow):
     def __init__(self, file_path=None):
         super().__init__()
-        self.setWindowTitle("Parquet Data Explorer")
+        self.setWindowTitle("Parquet Explorer")
         # Use absolute path for icon to work in snap environments
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.svg")
         if os.path.exists(icon_path):

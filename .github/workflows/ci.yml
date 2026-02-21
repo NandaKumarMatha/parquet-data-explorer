@@ -28,11 +28,13 @@ jobs:
       run: |
         pip install pyinstaller
         pyinstaller main.spec
+    - name: Rename executable
+      run: move dist\parquet-explorer.exe dist\parquet-explorer-Windows.exe
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: parquet-explorer-windows
-        path: dist/ParquetViewer.exe
+        name: parquet-explorer-Windows.exe
+        path: dist/parquet-explorer-Windows.exe
 
   test-linux:
     runs-on: ubuntu-latest
@@ -54,9 +56,11 @@ jobs:
     - name: Build executable
       run: |
         pip install pyinstaller
-        pyinstaller --onefile -n ParquetViewer main.py
+        pyinstaller --onefile -n parquet-explorer main.py
+    - name: Rename binary
+      run: mv dist/parquet-explorer dist/parquet-explorer-Linux
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: parquet-explorer-linux
-        path: dist/ParquetViewer
+        name: parquet-explorer-Linux
+        path: dist/parquet-explorer-Linux
