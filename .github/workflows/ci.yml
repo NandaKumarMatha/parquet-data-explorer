@@ -33,7 +33,7 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: parquet-explorer-Windows.exe
+        name: parquet-explorer-Windows.zip
         path: dist/parquet-explorer-Windows.exe
 
   test-linux:
@@ -62,5 +62,5 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: parquet-explorer-Linux
+        name: parquet-explorer-Linux.zip
         path: dist/parquet-explorer-Linux
