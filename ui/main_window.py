@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
-import qdarkstyle # type: ignore
+
 import pandas as pd
 from ui.commands import EditCommand
 from ui.styles import get_dark_stylesheet, get_light_stylesheet
@@ -15,56 +15,38 @@ class StyledComboBox(QComboBox):
     def paintEvent(self, event):
         """Paint the combo box with a visible dropdown arrow"""
         super().paintEvent(event)
-        # The dropdown is already drawn by stylesheet, this just ensures visibility
-        
+
 class CustomDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         """Custom painting for table cells with improved styling"""
-        # Draw background based on alternating rows
+        painter.save()
+        
+        # Draw background
         if option.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(option.rect, QColor("#3d7efb"))
-            text_color = QColor("white")
+            painter.fillRect(option.rect, option.palette.highlight())
+            text_color = option.palette.highlightedText().color()
         else:
-            if index.row() % 2 == 0:
-                painter.fillRect(option.rect, QColor("#252525"))
+            # Handle alternating background colors
+            if index.row() % 2 == 1:
+                painter.fillRect(option.rect, option.palette.alternateBase())
             else:
-                painter.fillRect(option.rect, QColor("#1a1a1a"))
-            text_color = QColor("#e0e0e0")
+                painter.fillRect(option.rect, option.palette.base())
+            text_color = option.palette.text().color()
         
         # Draw text
         painter.setPen(text_color)
-        font = option.font
-        font.setPointSize(9)
-        painter.setFont(font)
+        painter.setFont(option.font)
         
         # Draw cell text with proper padding
         text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
-        margin = 6
-        text_rect = option.rect.adjusted(margin, margin, -margin, -margin)
+        margin = 4
+        text_rect = option.rect.adjusted(margin, 0, -margin, 0)
         painter.drawText(text_rect, Qt.TextFlag.TextDontClip | Qt.AlignmentFlag.AlignVCenter, text)
-        
-        # Draw subtle cell border
-        painter.setPen(QPen(QColor("#3d3d3d"), 1, Qt.PenStyle.SolidLine))
-        painter.drawRect(option.rect.adjusted(0, 0, -1, -1))
+        painter.restore()
     
     def createEditor(self, parent, option, index):
         """Create editor widget with better styling"""
         editor = QLineEdit(parent)
-        editor.setStyleSheet("""
-            QLineEdit {
-                background-color: #2d2d2d;
-                color: #ffffff;
-                border: 2px solid #3d7efb;
-                border-radius: 3px;
-                padding: 4px 6px;
-                font-size: 10px;
-                font-weight: 500;
-            }
-            QLineEdit:focus {
-                background-color: #353535;
-                border: 2px solid #4a8bff;
-            }
-        """)
         return editor
     
     def setEditorData(self, editor, index):
@@ -177,8 +159,25 @@ class MainWindow(QMainWindow):
         self.create_menu()
         self.status_bar = self.statusBar()
         self.row_col_label = QLabel()
-        self.row_col_label.setStyleSheet("font-weight: 600; font-size: 11px; padding: 4px 10px;")
         self.status_bar.addPermanentWidget(self.row_col_label)
+        
+        # Compact Font Zoom Controls in Status Bar
+        zoom_in_btn = QPushButton("A+")
+        zoom_in_btn.setObjectName("zoomButton")
+        zoom_in_btn.setToolTip("Zoom In Data Font")
+        zoom_in_btn.clicked.connect(lambda: self.change_font_size(1))
+        
+        zoom_out_btn = QPushButton("A-")
+        zoom_out_btn.setObjectName("zoomButton")
+        zoom_out_btn.setToolTip("Zoom Out Data Font")
+        zoom_out_btn.clicked.connect(lambda: self.change_font_size(-1))
+        
+        self.status_bar.addPermanentWidget(zoom_out_btn)
+        self.status_bar.addPermanentWidget(zoom_in_btn)
+        
+        # Connect header signals for selection
+        self.table.horizontalHeader().sectionClicked.connect(self.on_horizontal_header_clicked)
+        self.table.verticalHeader().sectionClicked.connect(self.on_vertical_header_clicked)
         
         # Pagination controls
         self.page_size = 1000
@@ -186,10 +185,12 @@ class MainWindow(QMainWindow):
         self.total_rows = 0
         self.create_pagination_controls()
 
-        # Apply modern dark theme by default
-        app = QApplication.instance()
-        app.setStyleSheet(get_dark_stylesheet())
-
+        # Theme and Font size
+        self.current_theme = "dark" # Default theme
+        self.base_font_size = 9 # Default font size
+        # Apply corporate dark theme by default
+        self.apply_current_style()
+        
         if os.path.exists('sample.parquet'):
             self.load_data('sample.parquet')
         self.status_bar.showMessage("Ready")
@@ -246,10 +247,8 @@ class MainWindow(QMainWindow):
         self.stats_action.setChecked(True)
         self.stats_action.triggered.connect(lambda: self.stats_dock.setVisible(self.stats_action.isChecked()))
         view_menu.addAction(self.stats_action)
-
-        theme_menu = view_menu.addMenu("Theme")
         
-        self.theme_group = QActionGroup(self)
+        theme_menu = view_menu.addMenu("Theme")
         
         self.theme_group = QActionGroup(self)
         self.theme_group.setExclusive(True)
@@ -262,14 +261,27 @@ class MainWindow(QMainWindow):
             self.theme_group.addAction(action)
 
     def change_theme(self, theme_name):
+        self.current_theme = theme_name
+        self.apply_current_style()
+
+    def change_font_size(self, delta):
+        """Update the base font size and re-apply stylesheet"""
+        new_size = self.base_font_size + delta
+        if 8 <= new_size <= 24:
+            self.base_font_size = new_size
+            self.apply_current_style()
+            self.status_bar.showMessage(f"Font size set to {self.base_font_size}px", 2000)
+
+    def apply_current_style(self):
+        """Helper to apply current theme with dynamic font size"""
         app = QApplication.instance()
-        if theme_name == "dark":
-            app.setStyleSheet(get_dark_stylesheet())
-        elif theme_name == "light":
-            app.setStyleSheet(get_light_stylesheet())
+        if self.current_theme == "dark":
+            app.setStyleSheet(get_dark_stylesheet(font_size=self.base_font_size))
+        elif self.current_theme == "light":
+            app.setStyleSheet(get_light_stylesheet(font_size=self.base_font_size))
         else: # Auto
             # Default to dark theme for modern appearance
-            app.setStyleSheet(get_dark_stylesheet())
+            app.setStyleSheet(get_dark_stylesheet(font_size=self.base_font_size))
 
     def copy_selection(self):
         selection = self.table.selectionModel().selectedIndexes()
@@ -296,9 +308,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         self.table = QTableView()
-        self.table.setSortingEnabled(True)
         self.table.setAlternatingRowColors(True)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSortingEnabled(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setShowGrid(True)
         self.table.setGridStyle(Qt.PenStyle.SolidLine)
@@ -308,17 +320,8 @@ class MainWindow(QMainWindow):
         self.table.verticalHeader().setDefaultSectionSize(32)
         self.table.horizontalHeader().setDefaultSectionSize(100)
         self.table.horizontalHeader().setStretchLastSection(False)
-        
-        # Better row selection styling
-        self.table.setStyleSheet("""
-            QTableView {
-                gridline-color: #3d3d3d;
-            }
-            QTableView::item:selected {
-                background-color: #3d7efb;
-                color: white;
-            }
-        """)
+        self.table.horizontalHeader().setSectionsClickable(True)
+        self.table.verticalHeader().setSectionsClickable(True)
         
         self.visualization_widget = VisualizationWidget()
 
@@ -372,7 +375,6 @@ class MainWindow(QMainWindow):
         
         # Page Size Selector
         size_label = QLabel("Page Size:")
-        size_label.setStyleSheet("font-weight: 600; font-size: 11px;")
         layout.addWidget(size_label)
         
         self.page_size_combo = QComboBox()
@@ -386,15 +388,16 @@ class MainWindow(QMainWindow):
         layout.addSpacing(20)
 
         # Navigation
-        self.prev_btn = QPushButton("◀ Prev")
-        self.prev_btn.setMinimumWidth(70)
+        self.prev_btn = QPushButton("◀")
+        self.prev_btn.setFixedSize(30, 24)
+        self.prev_btn.setToolTip("Previous Page")
         self.prev_btn.clicked.connect(lambda: self.change_page(-1))
         
         self.page_label = QLabel("Page 1")
-        self.page_label.setStyleSheet("font-weight: 600; font-size: 11px; min-width: 80px; text-align: center;")
         
-        self.next_btn = QPushButton("Next ▶")
-        self.next_btn.setMinimumWidth(70)
+        self.next_btn = QPushButton("▶")
+        self.next_btn.setFixedSize(30, 24)
+        self.next_btn.setToolTip("Next Page")
         self.next_btn.clicked.connect(lambda: self.change_page(1))
         
         layout.addWidget(self.prev_btn)
@@ -476,6 +479,14 @@ class MainWindow(QMainWindow):
             self.model.dataChanged.emit(index, index)
         except Exception as e:
             print(f"Error refreshing view: {e}")
+
+    def on_horizontal_header_clicked(self, logical_index):
+        """Select entire column when header is clicked"""
+        self.table.selectColumn(logical_index)
+
+    def on_vertical_header_clicked(self, logical_index):
+        """Select entire row when vertical header is clicked"""
+        self.table.selectRow(logical_index)
 
     def update_table(self):
         self.model = DataFrameModel(self.filtered_df, self.df, self)
