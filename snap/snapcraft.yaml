@@ -1,6 +1,6 @@
 name: parquet-explorer
 base: core24
-version: '0.1.46'
+version: '0.2.0'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.

@@ -1,21 +1,67 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
-import qdarkstyle # type: ignore
+
 import pandas as pd
 from ui.commands import EditCommand
+from ui.styles import get_dark_stylesheet, get_light_stylesheet
 
 import os
 from data.parquet_handler import load_parquet, save_parquet, get_metadata, get_row_count
 from ui.visualization_widget import VisualizationWidget
 
+class StyledComboBox(QComboBox):
+    """Custom combo box with visible dropdown arrow indicator"""
+    def paintEvent(self, event):
+        """Paint the combo box with a visible dropdown arrow"""
+        super().paintEvent(event)
+
 class CustomDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        """Custom painting for table cells with improved styling"""
+        painter.save()
+        
+        # Draw background
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+            text_color = option.palette.highlightedText().color()
+        else:
+            # Handle alternating background colors
+            if index.row() % 2 == 1:
+                painter.fillRect(option.rect, option.palette.alternateBase())
+            else:
+                painter.fillRect(option.rect, option.palette.base())
+            text_color = option.palette.text().color()
+        
+        # Draw text
+        painter.setPen(text_color)
+        painter.setFont(option.font)
+        
+        # Draw cell text with proper padding
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        margin = 4
+        text_rect = option.rect.adjusted(margin, 0, -margin, 0)
+        painter.drawText(text_rect, Qt.TextFlag.TextDontClip | Qt.AlignmentFlag.AlignVCenter, text)
+        painter.restore()
+    
+    def createEditor(self, parent, option, index):
+        """Create editor widget with better styling"""
+        editor = QLineEdit(parent)
+        return editor
+    
     def setEditorData(self, editor, index):
+        """Set editor data with full text for editing"""
         if isinstance(editor, QLineEdit):
             # Get full text for editing
             source_index = index.model().mapToSource(index)
             full_value = str(source_index.model().df.iloc[source_index.row(), source_index.column()])
             editor.setText(full_value)
+            editor.selectAll()  # Select all text for convenience
+    
+    def setModelData(self, editor, model, index):
+        """Set model data after editing"""
+        if isinstance(editor, QLineEdit):
+            model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
 
 class DataFrameModel(QAbstractTableModel):
     def __init__(self, df, main_df, main_window=None):
@@ -115,6 +161,24 @@ class MainWindow(QMainWindow):
         self.row_col_label = QLabel()
         self.status_bar.addPermanentWidget(self.row_col_label)
         
+        # Compact Font Zoom Controls in Status Bar
+        zoom_in_btn = QPushButton("A+")
+        zoom_in_btn.setObjectName("zoomButton")
+        zoom_in_btn.setToolTip("Zoom In Data Font")
+        zoom_in_btn.clicked.connect(lambda: self.change_font_size(1))
+        
+        zoom_out_btn = QPushButton("A-")
+        zoom_out_btn.setObjectName("zoomButton")
+        zoom_out_btn.setToolTip("Zoom Out Data Font")
+        zoom_out_btn.clicked.connect(lambda: self.change_font_size(-1))
+        
+        self.status_bar.addPermanentWidget(zoom_out_btn)
+        self.status_bar.addPermanentWidget(zoom_in_btn)
+        
+        # Connect header signals for selection
+        self.table.horizontalHeader().sectionClicked.connect(self.on_horizontal_header_clicked)
+        self.table.verticalHeader().sectionClicked.connect(self.on_vertical_header_clicked)
+        
         # Pagination controls
         self.page_size = 1000
         self.current_page = 1
@@ -179,10 +243,8 @@ class MainWindow(QMainWindow):
         self.stats_action.setChecked(True)
         self.stats_action.triggered.connect(lambda: self.stats_dock.setVisible(self.stats_action.isChecked()))
         view_menu.addAction(self.stats_action)
-
-        theme_menu = view_menu.addMenu("Theme")
         
-        self.theme_group = QActionGroup(self)
+        theme_menu = view_menu.addMenu("Theme")
         
         self.theme_group = QActionGroup(self)
         self.theme_group.setExclusive(True)
@@ -195,15 +257,27 @@ class MainWindow(QMainWindow):
             self.theme_group.addAction(action)
 
     def change_theme(self, theme_name):
+        self.current_theme = theme_name
+        self.apply_current_style()
+
+    def change_font_size(self, delta):
+        """Update the base font size and re-apply stylesheet"""
+        new_size = self.base_font_size + delta
+        if 8 <= new_size <= 24:
+            self.base_font_size = new_size
+            self.apply_current_style()
+            self.status_bar.showMessage(f"Font size set to {self.base_font_size}px", 2000)
+
+    def apply_current_style(self):
+        """Helper to apply current theme with dynamic font size"""
         app = QApplication.instance()
-        if theme_name == "dark":
-            app.setStyleSheet(qdarkstyle.load_stylesheet())
-        elif theme_name == "light":
-            app.setStyleSheet("") # Reset to default (light)
+        if self.current_theme == "dark":
+            app.setStyleSheet(get_dark_stylesheet(font_size=self.base_font_size))
+        elif self.current_theme == "light":
+            app.setStyleSheet(get_light_stylesheet(font_size=self.base_font_size))
         else: # Auto
-            # Simple logic: default to light or check system (advanced)
-            # For now, just reset
-            app.setStyleSheet("")
+            # Default to dark theme for modern appearance
+            app.setStyleSheet(get_dark_stylesheet(font_size=self.base_font_size))
 
     def copy_selection(self):
         selection = self.table.selectionModel().selectedIndexes()
@@ -230,7 +304,20 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         self.table = QTableView()
+        self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setShowGrid(True)
+        self.table.setGridStyle(Qt.PenStyle.SolidLine)
+        self.table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        
+        # Improve margins and spacing
+        self.table.verticalHeader().setDefaultSectionSize(32)
+        self.table.horizontalHeader().setDefaultSectionSize(100)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.horizontalHeader().setSectionsClickable(True)
+        self.table.verticalHeader().setSectionsClickable(True)
         
         self.visualization_widget = VisualizationWidget()
 
@@ -279,28 +366,34 @@ class MainWindow(QMainWindow):
         # Container for all status bar controls
         container = QWidget()
         layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 10, 0)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(12)
         
         # Page Size Selector
-        layout.addWidget(QLabel("Page Size:"))
+        size_label = QLabel("Page Size:")
+        layout.addWidget(size_label)
+        
         self.page_size_combo = QComboBox()
         self.page_size_combo.addItems(["100", "1000", "5000", "10000"])
         self.page_size_combo.setCurrentText(str(self.page_size))
         self.page_size_combo.currentTextChanged.connect(lambda text: self.set_page_size(int(text)))
+        self.page_size_combo.setMinimumWidth(80)
         layout.addWidget(self.page_size_combo)
         
         # Spacer
         layout.addSpacing(20)
 
         # Navigation
-        self.prev_btn = QPushButton("<")
-        self.prev_btn.setFixedWidth(30)
+        self.prev_btn = QPushButton("◀")
+        self.prev_btn.setFixedSize(30, 24)
+        self.prev_btn.setToolTip("Previous Page")
         self.prev_btn.clicked.connect(lambda: self.change_page(-1))
         
         self.page_label = QLabel("Page 1")
         
-        self.next_btn = QPushButton(">")
-        self.next_btn.setFixedWidth(30)
+        self.next_btn = QPushButton("▶")
+        self.next_btn.setFixedSize(30, 24)
+        self.next_btn.setToolTip("Next Page")
         self.next_btn.clicked.connect(lambda: self.change_page(1))
         
         layout.addWidget(self.prev_btn)
@@ -382,6 +475,14 @@ class MainWindow(QMainWindow):
             self.model.dataChanged.emit(index, index)
         except Exception as e:
             print(f"Error refreshing view: {e}")
+
+    def on_horizontal_header_clicked(self, logical_index):
+        """Select entire column when header is clicked"""
+        self.table.selectColumn(logical_index)
+
+    def on_vertical_header_clicked(self, logical_index):
+        """Select entire row when vertical header is clicked"""
+        self.table.selectRow(logical_index)
 
     def update_table(self):
         self.model = DataFrameModel(self.filtered_df, self.df, self)
