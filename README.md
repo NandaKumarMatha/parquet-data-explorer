@@ -1,5 +1,7 @@
 # Parquet Data Explorer
 
+[![parquet-explorer](https://snapcraft.io/parquet-explorer/badge.svg)](https://snapcraft.io/parquet-explorer)
+[![parquet-explorer](https://snapcraft.io/parquet-explorer/trending.svg?name=0)](https://snapcraft.io/parquet-explorer)
 [![CI](https://github.com/NandaKumarMatha/parquet-data-explorer/actions/workflows/ci.yml/badge.svg)](https://github.com/NandaKumarMatha/parquet-data-explorer/actions/workflows/ci.yml)
 
 A cross-platform desktop application for viewing, editing, and manipulating Parquet files.
@@ -29,10 +31,17 @@ Or install from source:
 
 ## Building for Distribution
 Use PyInstaller to create a standalone executable:
-- For a single file: `pyinstaller --onefile --windowed main.py`
-- For a directory: `pyinstaller --onedir --windowed main.py`
+`pyinstaller main.spec`
 
 The executable will be in the `dist/` folder.
+
+## Creating a Release (Maintainers)
+To create a new release on GitHub:
+1. Go to the "Releases" section on GitHub.
+2. Click "Draft a new release".
+3. Tag the release (e.g., v1.0.0).
+4. Click "Publish release".
+This will trigger the workflow to build and upload the executables.
 
 ## Contributing
 

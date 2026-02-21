@@ -8,11 +8,17 @@ description: |
 
 grade: devel # Change to 'stable' for release
 confinement: strict
+license: MIT
+website: https://github.com/NandaKumarMatha/parquet-data-explorer
+source-code: https://github.com/NandaKumarMatha/parquet-data-explorer
+issues: https://github.com/NandaKumarMatha/parquet-data-explorer/issues
+icon: snap/gui/icon.png
 
 apps:
   parquet-explorer:
     common-id: parquet-explorer
     command: bin/parquet-explorer
+
     plugs: [home, desktop, desktop-legacy, wayland, x11, opengl, removable-media]
     extensions: [gnome]
     environment:
@@ -33,6 +39,8 @@ parts:
       - PyQt6
       - pyarrow
       - pandas
+      - qdarkstyle
+      - matplotlib
     stage-packages:
       - libpython3-stdlib
       - libpython3.12-minimal

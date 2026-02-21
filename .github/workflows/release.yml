@@ -8,7 +8,9 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -19,16 +21,18 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     - name: Build executable
-      run: pyinstaller --onefile --windowed main.py
+      run: pyinstaller main.spec
     - name: Upload release asset
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/main.exe
+        files: dist/ParquetViewer.exe
 
   build-linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -39,8 +43,8 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     - name: Build executable
-      run: pyinstaller --onefile main.py
+      run: pyinstaller --onefile --windowed -n ParquetViewer main.py
     - name: Upload release asset
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/main
+        files: dist/ParquetViewer
