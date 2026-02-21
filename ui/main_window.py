@@ -141,7 +141,7 @@ class DataFrameModel(QAbstractTableModel):
 class MainWindow(QMainWindow):
     def __init__(self, file_path=None):
         super().__init__()
-        self.setWindowTitle("Parquet Data Explorer")
+        self.setWindowTitle("Parquet Explorer")
         # Use absolute path for icon to work in snap environments
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.svg")
         if os.path.exists(icon_path):
@@ -153,6 +153,8 @@ class MainWindow(QMainWindow):
         self.proxy = QSortFilterProxyModel()
         self.original_df = None
         self.undo_stack = QUndoStack(self)
+        self.base_font_size = 11
+        self.current_theme = "auto"
         self.create_table()
         self.create_query_widget()
         self.create_stats_widget()
@@ -189,6 +191,8 @@ class MainWindow(QMainWindow):
             self.load_data(file_path)
         elif os.path.exists('sample.parquet'):
             self.load_data('sample.parquet')
+        
+        self.apply_current_style()
         self.status_bar.showMessage("Ready")
 
     def create_menu(self):
