@@ -3,7 +3,7 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 
 import pandas as pd
-from ui.commands import EditCommand
+from ui.commands import EditCommand, AddRowCommand, DeleteRowCommand, AddColumnCommand, DeleteColumnCommand
 from ui.styles import get_dark_stylesheet, get_light_stylesheet
 
 import os
@@ -59,9 +59,15 @@ class CustomDelegate(QStyledItemDelegate):
             editor.selectAll()  # Select all text for convenience
     
     def setModelData(self, editor, model, index):
-        """Set model data after editing"""
+        """Set model data after editing, ensuring we reach the source model"""
         if isinstance(editor, QLineEdit):
-            model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
+            # If the model is a proxy, we want to call setData on the source model
+            if hasattr(model, 'sourceModel'):
+                source_model = model.sourceModel()
+                source_index = model.mapToSource(index)
+                source_model.setData(source_index, editor.text(), Qt.ItemDataRole.EditRole)
+            else:
+                model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
 
 class DataFrameModel(QAbstractTableModel):
     def __init__(self, df, main_df, main_window=None):
@@ -101,9 +107,15 @@ class DataFrameModel(QAbstractTableModel):
 
     def setData(self, index, value, role):
         if role == Qt.ItemDataRole.EditRole:
+            if self.main_window:
+                self.main_window._manual_dirty = True
+
             row_idx = self.df.index[index.row()]
             col = self.df.columns[index.column()]
-            dtype = self.main_df[col].dtype
+            dtype = self.df[col].dtype # Use df dtype as fallback
+            if self.main_df is not None and col in self.main_df.columns:
+                 dtype = self.main_df[col].dtype
+
             try:
                 if dtype == 'int64':
                     value = int(value)
@@ -118,12 +130,13 @@ class DataFrameModel(QAbstractTableModel):
                 if self.main_window and self.main_window.undo_stack:
                     command = EditCommand(self.main_window, index, old_value, value)
                     self.main_window.undo_stack.push(command)
+                    self.main_window.update_window_title()
                     return True
                 else:
                     return self.set_data_internal(index, value)
 
             except ValueError as e:
-                QMessageBox.warning(self.window(), "Edit Error", f"Invalid value for {dtype}: {str(e)}")
+                QMessageBox.warning(self.main_window, "Edit Error", f"Invalid value for {dtype}: {str(e)}")
                 return False
         return False
 
@@ -141,7 +154,7 @@ class DataFrameModel(QAbstractTableModel):
 class MainWindow(QMainWindow):
     def __init__(self, file_path=None):
         super().__init__()
-        self.setWindowTitle("Parquet Explorer")
+        self.setWindowTitle("Parquet Explorer [*]")
         # Use absolute path for icon to work in snap environments
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.svg")
         if os.path.exists(icon_path):
@@ -153,6 +166,10 @@ class MainWindow(QMainWindow):
         self.proxy = QSortFilterProxyModel()
         self.original_df = None
         self.undo_stack = QUndoStack(self)
+        self.undo_stack.cleanChanged.connect(lambda _: self.update_window_title())
+        self.undo_stack.indexChanged.connect(lambda _: self.update_window_title())
+        # Add a property to track if there were EVER changes (backup logic)
+        self._manual_dirty = False 
         self.base_font_size = 11
         self.current_theme = "auto"
         self.create_table()
@@ -178,8 +195,16 @@ class MainWindow(QMainWindow):
         self.status_bar.addPermanentWidget(zoom_in_btn)
         
         # Connect header signals for selection
+        self.table.horizontalHeader().setSectionsClickable(True)
+        self.table.verticalHeader().setSectionsClickable(True)
         self.table.horizontalHeader().sectionClicked.connect(self.on_horizontal_header_clicked)
         self.table.verticalHeader().sectionClicked.connect(self.on_vertical_header_clicked)
+        
+        # Header Context Menus
+        self.table.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.verticalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.horizontalHeader().customContextMenuRequested.connect(self.show_column_context_menu)
+        self.table.verticalHeader().customContextMenuRequested.connect(self.show_row_context_menu)
         
         # Pagination controls
         self.page_size = 1000
@@ -456,7 +481,10 @@ class MainWindow(QMainWindow):
             self.filtered_df = self.df
             self.current_file_path = file_name
             self.undo_stack.clear() # Clear undo stack on new data load
+            self.undo_stack.setClean()
+            self._manual_dirty = False
             self.update_table()
+            self.update_window_title()
             self.update_pagination_controls()
             self.status_bar.showMessage(f"Loaded {len(self.df)} rows (Total: {self.total_rows})")
         except Exception as e:
@@ -481,12 +509,30 @@ class MainWindow(QMainWindow):
             print(f"Error refreshing view: {e}")
 
     def on_horizontal_header_clicked(self, logical_index):
-        """Select entire column when header is clicked"""
-        self.table.selectColumn(logical_index)
+        """Select entire column when header is clicked, supporting multi-selection"""
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers == Qt.KeyboardModifier.ControlModifier:
+            # Use MultiSelection mode temporarily to toggle without clearing others
+            old_mode = self.table.selectionMode()
+            self.table.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+            self.table.selectColumn(logical_index)
+            self.table.setSelectionMode(old_mode)
+        elif modifiers == Qt.KeyboardModifier.ShiftModifier:
+            self.table.selectColumn(logical_index)
+        else:
+            self.table.selectColumn(logical_index)
 
     def on_vertical_header_clicked(self, logical_index):
-        """Select entire row when vertical header is clicked"""
-        self.table.selectRow(logical_index)
+        """Select entire row when vertical header is clicked, supporting multi-selection"""
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers == Qt.KeyboardModifier.ControlModifier:
+            # Use MultiSelection mode temporarily to toggle without clearing others
+            old_mode = self.table.selectionMode()
+            self.table.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+            self.table.selectRow(logical_index)
+            self.table.setSelectionMode(old_mode)
+        else:
+            self.table.selectRow(logical_index)
 
     def update_table(self):
         self.model = DataFrameModel(self.filtered_df, self.df, self)
@@ -528,22 +574,61 @@ class MainWindow(QMainWindow):
         self.stats_text.setPlainText(text)
 
     def save_file(self):
+        try:
+            if self.current_file_path:
+                save_parquet(self.df, self.current_file_path)
+                self.undo_stack.setClean()
+                self._manual_dirty = False
+                self.status_bar.showMessage("Saved", 3000)
+                self.update_window_title()
+                return True
+            else:
+                file_name, _ = QFileDialog.getSaveFileName(self, "Save Parquet File", "", "Parquet Files (*.parquet)")
+                if file_name:
+                    save_parquet(self.df, file_name)
+                    self.current_file_path = file_name
+                    self.undo_stack.setClean()
+                    self.status_bar.showMessage("Saved", 3000)
+                    self.update_window_title()
+                    return True
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", f"Failed to save file: {str(e)}")
+        return False
+
+    def update_window_title(self, *args):
+        try:
+            # Atomic safety check for C++ object destruction
+            if not hasattr(self, 'undo_stack') or self.undo_stack is None:
+                return
+            # Force check if it's actually alive
+            _foo = self.undo_stack.isClean()
+        except (RuntimeError, AttributeError):
+            return
+
+        title = "Parquet Explorer"
         if self.current_file_path:
-            save_parquet(self.df, self.current_file_path)
-            self.status_bar.showMessage("Saved")
-        else:
-            file_name, _ = QFileDialog.getSaveFileName(self, "Save Parquet File", "", "Parquet Files (*.parquet)")
-            if file_name:
-                save_parquet(self.df, file_name)
-                self.current_file_path = file_name
-                self.status_bar.showMessage("Saved")
+            title += f" - {os.path.basename(self.current_file_path)}"
+        
+        is_modified = not self.undo_stack.isClean() or self._manual_dirty
+        
+        if is_modified:
+            title += " [Modified]"
+        
+        # Restore placeholder for setWindowModified logic
+        full_title = title + " [*]"
+        if self.windowTitle() != full_title:
+            self.setWindowTitle(full_title)
+            
+        self.setWindowModified(is_modified)
 
     def new_file(self):
         self.df = pd.DataFrame()
         self.original_df = None
         self.filtered_df = self.df
         self.current_file_path = None
+        self.undo_stack.clear()
         self.update_table()
+        self.update_window_title()
         self.status_bar.showMessage("New file created")
 
     def export_file(self):
@@ -583,3 +668,140 @@ class MainWindow(QMainWindow):
             self.search_edit.clear()
             self.query_edit.clear()
             self.status_bar.showMessage("Data reset to original")
+
+    def show_row_context_menu(self, pos):
+        menu = QMenu(self)
+        
+        add_row_act = QAction("Add Row", self)
+        add_row_act.triggered.connect(self.add_row)
+        menu.addAction(add_row_act)
+        
+        delete_row_act = QAction("Delete Selected Row(s)", self)
+        delete_row_act.triggered.connect(self.delete_selected_rows)
+        menu.addAction(delete_row_act)
+        
+        menu.exec(self.table.verticalHeader().viewport().mapToGlobal(pos))
+
+    def show_column_context_menu(self, pos):
+        menu = QMenu(self)
+        
+        add_col_act = QAction("Add Column", self)
+        add_col_act.triggered.connect(self.add_column)
+        menu.addAction(add_col_act)
+        
+        delete_col_act = QAction("Delete Selected Column(s)", self)
+        delete_col_act.triggered.connect(self.delete_selected_columns)
+        menu.addAction(delete_col_act)
+        
+        menu.exec(self.table.horizontalHeader().viewport().mapToGlobal(pos))
+
+    def add_row(self):
+        selection = self.table.selectionModel().selectedRows()
+        row_idx = selection[0].row() if selection else len(self.df)
+        command = AddRowCommand(self, row_idx)
+        self.undo_stack.push(command)
+        self._manual_dirty = True
+        self.update_window_title()
+
+    def delete_selected_rows(self):
+        selection = self.table.selectionModel().selectedRows()
+        if not selection:
+            return
+        row_indices = [idx.row() for idx in selection if idx.row() < len(self.df)]
+        if not row_indices:
+            return
+            
+        confirm = QMessageBox.question(self, "Confirm Delete", 
+                                     f"Are you sure you want to delete {len(row_indices)} row(s)?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if confirm == QMessageBox.StandardButton.Yes:
+            command = DeleteRowCommand(self, row_indices)
+            self.undo_stack.push(command)
+            self._manual_dirty = True
+            self.update_window_title()
+
+    def add_column(self):
+        name, ok = QInputDialog.getText(self, "Add Column", "Column Name:")
+        if ok and name:
+            if name in self.df.columns:
+                QMessageBox.warning(self, "Error", "Column already exists")
+                return
+            
+            types = ["object", "int64", "float64"]
+            dtype, ok = QInputDialog.getItem(self, "Column Type", "Select type:", types, 0, False)
+            if ok:
+                command = AddColumnCommand(self, name, dtype)
+                self.undo_stack.push(command)
+                self._manual_dirty = True
+                self.update_window_title()
+
+    def delete_selected_columns(self):
+        selection = self.table.selectionModel().selectedColumns()
+        if not selection:
+            # Check if cells are selected and get columns from them
+            selected_indexes = self.table.selectionModel().selectedIndexes()
+            col_indices = list(set(idx.column() for idx in selected_indexes))
+        else:
+            col_indices = [idx.column() for idx in selection]
+            
+        if not col_indices:
+            return
+            
+        col_names = [self.df.columns[i] for i in col_indices]
+        confirm = QMessageBox.question(self, "Confirm Delete", 
+                                     f"Are you sure you want to delete column(s): {', '.join(col_names)}?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if confirm == QMessageBox.StandardButton.Yes:
+            command = DeleteColumnCommand(self, col_indices)
+            self.undo_stack.push(command)
+            self._manual_dirty = True
+            self.update_window_title()
+
+    def closeEvent(self, event):
+        # Force any active edit to commit
+        if self.table.model():
+            self.table.clearFocus() 
+            QApplication.processEvents()
+            
+        is_modified = False
+        try:
+            is_modified = not self.undo_stack.isClean() or self._manual_dirty
+        except RuntimeError:
+            pass
+        
+        if is_modified:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Unsaved Changes")
+            msg_box.setText("The data has been modified.")
+            msg_box.setInformativeText("Do you want to save your changes before closing?")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Save | 
+                                      QMessageBox.StandardButton.Discard | 
+                                      QMessageBox.StandardButton.Cancel)
+            msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
+            msg_box.setIcon(QMessageBox.Icon.Question)
+
+            ret = msg_box.exec()
+            
+            if ret == QMessageBox.StandardButton.Save:
+                if self.save_file():
+                    # Disconnect signals before accepting to prevent RuntimeError
+                    self._safe_disconnect()
+                    event.accept()
+                else:
+                    event.ignore()
+            elif ret == QMessageBox.StandardButton.Discard:
+                self._safe_disconnect()
+                event.accept()
+            else: # Cancel
+                event.ignore()
+        else:
+            self._safe_disconnect()
+            event.accept()
+
+    def _safe_disconnect(self):
+        """Safely disconnect signals before destruction"""
+        try:
+            self.undo_stack.cleanChanged.disconnect()
+            self.undo_stack.indexChanged.disconnect()
+        except:
+            pass
