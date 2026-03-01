@@ -9,6 +9,7 @@ from ui.styles import get_dark_stylesheet, get_light_stylesheet
 import os
 from data.parquet_handler import load_parquet, save_parquet, get_metadata, get_row_count
 from ui.visualization_widget import VisualizationWidget
+from ui.plot_config_widget import PlotConfigWidget
 
 class StyledComboBox(QComboBox):
     """Custom combo box with visible dropdown arrow indicator"""
@@ -175,7 +176,11 @@ class MainWindow(QMainWindow):
         self.create_table()
         self.create_query_widget()
         self.create_stats_widget()
+        self.create_plot_config_widget()
         self.create_menu()
+        
+        # Connect tab change to dock visibility logic
+        self.tabs.currentChanged.connect(self.on_tab_changed)
         self.status_bar = self.statusBar()
         self.row_col_label = QLabel()
         self.status_bar.addPermanentWidget(self.row_col_label)
@@ -287,6 +292,7 @@ class MainWindow(QMainWindow):
 
     def change_theme(self, theme_name):
         self.current_theme = theme_name
+        self.visualization_widget.set_theme(theme_name)
         self.apply_current_style()
 
     def change_font_size(self, delta):
@@ -349,6 +355,7 @@ class MainWindow(QMainWindow):
         self.table.verticalHeader().setSectionsClickable(True)
         
         self.visualization_widget = VisualizationWidget()
+        self.visualization_widget.set_theme(self.current_theme)
 
         self.tabs.addTab(self.table, "Data")
         self.tabs.addTab(self.visualization_widget, "Visualizations")
@@ -465,6 +472,26 @@ class MainWindow(QMainWindow):
         if file_name:
             self.load_data(file_name)
 
+    def create_plot_config_widget(self):
+        self.plot_config_widget = PlotConfigWidget()
+        self.plot_config_dock = QDockWidget("Plot Configuration", self)
+        self.plot_config_dock.setWidget(self.plot_config_widget)
+        self.plot_config_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.plot_config_dock)
+        self.plot_config_dock.hide() # Hidden by default, shown on Visualization tab
+        
+        # Connect to visualization widget
+        self.plot_config_widget.config_changed.connect(self.visualization_widget.set_advanced_config)
+
+    def on_tab_changed(self, index):
+        # index 1 is Visualizations tab
+        if index == 1:
+            self.plot_config_dock.show()
+            self.stats_dock.hide()
+        else:
+            self.plot_config_dock.hide()
+            self.stats_dock.show()
+
     def load_data(self, file_name, reset_page=True):
         self.status_bar.showMessage("Loading...")
         try:
@@ -486,6 +513,10 @@ class MainWindow(QMainWindow):
             self.update_table()
             self.update_window_title()
             self.update_pagination_controls()
+            
+            # Sync columns to plot config
+            self.plot_config_widget.set_columns(self.df.columns.tolist())
+            
             self.status_bar.showMessage(f"Loaded {len(self.df)} rows (Total: {self.total_rows})")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load file: {str(e)}")
