@@ -1,12 +1,12 @@
 name: parquet-explorer
 base: core24
-version: '0.2.2'
+version: '0.2.3'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.
   Features include opening parquet files and viewing them in a table.
 
-grade: devel # Change to 'stable' for release
+grade: devel  # CI sets stable on master/main; devel on other branches
 confinement: strict
 license: MIT
 website: https://github.com/NandaKumarMatha/parquet-data-explorer
@@ -57,3 +57,6 @@ parts:
       - libxtst6
       - libasound2
       - libpulse0
+      # Required by PyQt6.QtWebEngineWidgets at import time (not bundled in pip wheels)
+      - libxkbfile1
+      - libatomic1
