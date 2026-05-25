@@ -7,10 +7,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      artifact_suffix: ${{ steps.vars.outputs.suffix }}
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: Set safe artifact suffix
+      id: vars
+      run: echo "suffix=$(echo '${{ github.ref_name }}' | sed 's#[/\\:*?"<>|]#-#g')" >> "$GITHUB_OUTPUT"
 
     - name: Set snap grade from branch
       run: |
@@ -27,7 +33,7 @@ jobs:
     - name: Upload Snap Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: snap-${{ github.ref_name }}
+        name: snap-${{ steps.vars.outputs.suffix }}
         path: ${{ steps.build.outputs.snap }}
 
   publish-stable:
@@ -37,7 +43,7 @@ jobs:
     steps:
     - uses: actions/download-artifact@v4
       with:
-        name: snap-${{ github.ref_name }}
+        name: snap-${{ needs.build.outputs.artifact_suffix }}
         path: .
 
     - name: Get Snap Filename
@@ -59,7 +65,7 @@ jobs:
     steps:
     - uses: actions/download-artifact@v4
       with:
-        name: snap-${{ github.ref_name }}
+        name: snap-${{ needs.build.outputs.artifact_suffix }}
         path: .
 
     - name: Get Snap Filename
