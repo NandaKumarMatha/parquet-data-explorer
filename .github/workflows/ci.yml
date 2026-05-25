@@ -1,8 +1,9 @@
 name: CI/CD
 
+# Non-master pushes and PRs: test and build artifacts (pre-release).
+# master/main pushes: same checks before snap stable publish (see snap.yml).
 on:
   push:
-    branches: [ master, main ]
   pull_request:
     branches: [ master, main ]
 
@@ -33,7 +34,7 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: parquet-explorer-Windows.zip
+        name: parquet-explorer-Windows-${{ github.ref_name }}
         path: dist/parquet-explorer-Windows.exe
 
   test-linux:
@@ -62,5 +63,5 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: parquet-explorer-Linux.zip
+        name: parquet-explorer-Linux-${{ github.ref_name }}
         path: dist/parquet-explorer-Linux
