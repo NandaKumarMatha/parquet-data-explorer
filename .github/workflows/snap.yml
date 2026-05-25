@@ -2,7 +2,6 @@ name: Build and Publish Snap
 
 on:
   push:
-    branches: [ master, main ]
   workflow_dispatch:
 
 jobs:
@@ -12,32 +11,62 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    
+
+    - name: Set snap grade from branch
+      run: |
+        if [[ "${{ github.ref }}" == "refs/heads/master" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          sed -i 's/^grade: .*/grade: stable/' snap/snapcraft.yaml
+        else
+          sed -i 's/^grade: .*/grade: devel/' snap/snapcraft.yaml
+        fi
+
     - name: Build Snap
       uses: snapcore/action-build@v1
       id: build
-      
+
     - name: Upload Snap Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: snap
+        name: snap-${{ github.ref_name }}
         path: ${{ steps.build.outputs.snap }}
 
-  publish:
+  publish-stable:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     steps:
     - uses: actions/download-artifact@v4
       with:
-        name: snap
+        name: snap-${{ github.ref_name }}
         path: .
-    
+
     - name: Get Snap Filename
       id: snap_filename
       run: echo "SNAP_FILE=$(ls *.snap | head -n 1)" >> $GITHUB_OUTPUT
 
-    - name: Publish Snap
+    - name: Publish Snap (stable)
+      uses: snapcore/action-publish@v1
+      env:
+        SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+      with:
+        snap: ${{ steps.snap_filename.outputs.SNAP_FILE }}
+        release: stable
+
+  publish-edge:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main'
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: snap-${{ github.ref_name }}
+        path: .
+
+    - name: Get Snap Filename
+      id: snap_filename
+      run: echo "SNAP_FILE=$(ls *.snap | head -n 1)" >> $GITHUB_OUTPUT
+
+    - name: Publish Snap (edge, devel grade)
       uses: snapcore/action-publish@v1
       env:
         SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
