@@ -61,8 +61,6 @@ parts:
       - libxkbfile1
       - libatomic1
       - liboss4-salsa2
-      - libpxbackend-1
-      - libxkbfile
     override-prime: |
       craftctl default
       if [ -f "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/oss4-libsalsa/libOSSlib.so" ]; then
