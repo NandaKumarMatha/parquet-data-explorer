@@ -1,6 +1,6 @@
 name: parquet-explorer
 base: core24
-version: '0.2.3'
+version: '0.2.4'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.
@@ -60,3 +60,11 @@ parts:
       # Required by PyQt6.QtWebEngineWidgets at import time (not bundled in pip wheels)
       - libxkbfile1
       - libatomic1
+      - liboss4-salsa2
+      - libpxbackend-1
+      - libxkbfilel
+    override-prime: |
+      craftctl default
+      if [ -f "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/oss4-libsalsa/libOSSlib.so" ]; then
+        ln -sf oss4-libsalsa/libOSSlib.so "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/libOSSlib.so"
+      fi
