@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -11,7 +14,7 @@ jobs:
       artifact_suffix: ${{ steps.vars.outputs.suffix }}
       snap_version: ${{ steps.version.outputs.version }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 0
 
@@ -34,7 +37,7 @@ jobs:
         snapcraft-args: pack
 
     - name: Upload Snap Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: snap-${{ steps.vars.outputs.suffix }}
         path: ${{ steps.build.outputs.snap }}
@@ -44,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v5
       with:
         name: snap-${{ needs.build.outputs.artifact_suffix }}
         path: .
@@ -64,6 +67,25 @@ jobs:
         channel_field() {
           snapcraft status "$SNAP_NAME" 2>/dev/null \
             | awk -v risk="$1" -v col="$2" '$1 == "latest" && $3 == risk { print $(col); exit }'
+        }
+
+        release_to_channel() {
+          local rev="$1"
+          local channel="$2"
+          local label="$3"
+          local output
+          if output=$(snapcraft release "$SNAP_NAME" "$rev" "$channel" 2>&1); then
+            echo "$output"
+            echo "$label"
+            return 0
+          fi
+          if echo "$output" | grep -qE 'grade: devel|cannot target a stable channel'; then
+            echo "Skipping $channel promotion for revision $rev: revision was built with grade devel."
+            echo "$output"
+            return 0
+          fi
+          echo "$output" >&2
+          return 1
         }
 
         EDGE_VERSION=$(channel_field edge 4 || true)
@@ -94,13 +116,13 @@ jobs:
 
         if [[ "$VERSION_CHANGED" == "true" ]]; then
           if [[ -n "${EDGE_REV:-}" && "$EDGE_REV" != "$NEW_REV" ]]; then
-            snapcraft release "$SNAP_NAME" "$EDGE_REV" beta
-            echo "Promoted previous edge (rev $EDGE_REV, version $EDGE_VERSION) to latest/beta"
+            release_to_channel "$EDGE_REV" beta \
+              "Promoted previous edge (rev $EDGE_REV, version $EDGE_VERSION) to latest/beta"
           fi
 
           if [[ -n "${BETA_REV:-}" && "$BETA_REV" != "$EDGE_REV" ]]; then
-            snapcraft release "$SNAP_NAME" "$BETA_REV" stable
-            echo "Promoted previous beta (rev $BETA_REV) to latest/stable"
+            release_to_channel "$BETA_REV" stable \
+              "Promoted previous beta (rev $BETA_REV) to latest/stable"
           fi
         fi
 
