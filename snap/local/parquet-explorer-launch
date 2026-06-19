@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+# Prefer PyQt6's bundled Qt runtime without replacing snapd's OpenGL paths.
+PYQT6_LIB="$SNAP/lib/python3.12/site-packages/PyQt6/Qt6/lib"
+export LD_LIBRARY_PATH="$PYQT6_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# WebEngine/Chromium needs this under strict snap confinement.
+export QTWEBENGINE_DISABLE_SANDBOX="${QTWEBENGINE_DISABLE_SANDBOX:-1}"
+
+exec "$SNAP/bin/parquet-explorer.bin" "$@"
