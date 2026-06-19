@@ -2,45 +2,107 @@ name: Build and Publish Snap
 
 on:
   push:
-    branches: [ master, main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      artifact_suffix: ${{ steps.vars.outputs.suffix }}
+      snap_version: ${{ steps.version.outputs.version }}
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    
+
+    - name: Set safe artifact suffix
+      id: vars
+      run: echo "suffix=$(echo '${{ github.ref_name }}' | sed 's#[/\\:*?"<>|]#-#g')" >> "$GITHUB_OUTPUT"
+
+    - name: Read snap version
+      id: version
+      run: |
+        VERSION=$(grep -E '^version:' snap/snapcraft.yaml | head -1 | sed -E "s/^version:[[:space:]]*['\"]?([^'\"]+)['\"]?/\1/")
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
     - name: Build Snap
       uses: snapcore/action-build@v1
       id: build
-      
+      with:
+        # Builds inside managed Ubuntu 24.04 (LXD). Do not use --destructive-mode:
+        # the gnome extension needs build-snaps (e.g. mesa-2404) that fail on the runner host.
+        snapcraft-args: pack
+
     - name: Upload Snap Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: snap
+        name: snap-${{ steps.vars.outputs.suffix }}
         path: ${{ steps.build.outputs.snap }}
 
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     steps:
     - uses: actions/download-artifact@v4
       with:
-        name: snap
+        name: snap-${{ needs.build.outputs.artifact_suffix }}
         path: .
-    
-    - name: Get Snap Filename
-      id: snap_filename
-      run: echo "SNAP_FILE=$(ls *.snap | head -n 1)" >> $GITHUB_OUTPUT
 
-    - name: Publish Snap
-      uses: snapcore/action-publish@v1
+    - name: Install Snapcraft
+      run: sudo snap install snapcraft --classic
+
+    - name: Upload to store (cascade channels only when version changes)
       env:
         SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-      with:
-        snap: ${{ steps.snap_filename.outputs.SNAP_FILE }}
-        release: edge
+        NEW_VERSION: ${{ needs.build.outputs.snap_version }}
+      run: |
+        set -euo pipefail
+        SNAP_NAME=parquet-explorer
+        SNAP_FILE=$(ls *.snap | head -n 1)
+
+        channel_field() {
+          snapcraft status "$SNAP_NAME" 2>/dev/null \
+            | awk -v risk="$1" -v col="$2" '$1 == "latest" && $3 == risk { print $(col); exit }'
+        }
+
+        EDGE_VERSION=$(channel_field edge 4 || true)
+        EDGE_REV=$(channel_field edge 5 || true)
+        BETA_REV=$(channel_field beta 5 || true)
+
+        echo "New version (snapcraft.yaml): $NEW_VERSION"
+        echo "Current edge version: ${EDGE_VERSION:-<none>} (rev ${EDGE_REV:-none})"
+
+        if [[ "$NEW_VERSION" == "${EDGE_VERSION:-}" ]]; then
+          VERSION_CHANGED=false
+          echo "Version unchanged — will update edge only (no beta/stable cascade)."
+        else
+          VERSION_CHANGED=true
+          echo "Version changed — will cascade: new→edge, old edge→beta, old beta→stable."
+        fi
+
+        UPLOAD_LOG=$(snapcraft upload "$SNAP_FILE" 2>&1 | tee /dev/stderr)
+        NEW_REV=$(echo "$UPLOAD_LOG" | grep -oE '(Revision|revision) [0-9]+' | tail -1 | awk '{print $2}')
+        if [[ -z "${NEW_REV:-}" ]]; then
+          echo "Could not parse revision from upload output"
+          exit 1
+        fi
+        echo "Uploaded revision: $NEW_REV"
+
+        snapcraft release "$SNAP_NAME" "$NEW_REV" edge
+        echo "Released revision $NEW_REV ($NEW_VERSION) to latest/edge"
+
+        if [[ "$VERSION_CHANGED" == "true" ]]; then
+          if [[ -n "${EDGE_REV:-}" && "$EDGE_REV" != "$NEW_REV" ]]; then
+            snapcraft release "$SNAP_NAME" "$EDGE_REV" beta
+            echo "Promoted previous edge (rev $EDGE_REV, version $EDGE_VERSION) to latest/beta"
+          fi
+
+          if [[ -n "${BETA_REV:-}" && "$BETA_REV" != "$EDGE_REV" ]]; then
+            snapcraft release "$SNAP_NAME" "$BETA_REV" stable
+            echo "Promoted previous beta (rev $BETA_REV) to latest/stable"
+          fi
+        fi
+
+        echo "Channel map after release:"
+        snapcraft status "$SNAP_NAME" || true

@@ -1,51 +1,68 @@
 name: parquet-explorer
+title: Parquet Explorer
 base: core24
-version: '0.2.2'
+version: '0.2.44'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.
   Features include opening parquet files and viewing them in a table.
 
-grade: devel # Change to 'stable' for release
+grade: stable
 confinement: strict
 license: MIT
-website: https://github.com/NandaKumarMatha/parquet-data-explorer
-source-code: https://github.com/NandaKumarMatha/parquet-data-explorer
-issues: https://github.com/NandaKumarMatha/parquet-data-explorer/issues
+website: 
+  - https://nandakumarmatha.github.io/
+source-code: 
+  - https://github.com/NandaKumarMatha/parquet-data-explorer
+issues: 
+  - https://github.com/NandaKumarMatha/parquet-data-explorer/issues
 icon: snap/gui/icon.png
+contact: 
+  - nandakumarmatha98@gmail.com
+
+plugs:
+  shared-memory:
+    interface: shared-memory
+    private: true
 
 apps:
   parquet-explorer:
+    command: bin/parquet-explorer-launch
     common-id: parquet-explorer
-    command: bin/parquet-explorer
-
-    plugs: [home, desktop, desktop-legacy, wayland, x11, opengl, removable-media]
-    extensions: [gnome]
+    plugs: [home, desktop, desktop-legacy, wayland, x11, opengl, removable-media, shared-memory, network]
+    # extensions: [gnome]
     environment:
-      # Ensure python can find site-packages
       PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/lib/python3.12/site-packages
-      # Prevent GIO from loading libproxy module which causes errors in snap
+      QT_PLUGIN_PATH: $SNAP/lib/python3.12/site-packages/PyQt6/Qt6/plugins
+      QML2_IMPORT_PATH: $SNAP/lib/python3.12/site-packages/PyQt6/Qt6/qml
       GIO_EXTRA_MODULES: ""
-      # Use Qt's native platform theme instead of portal-based dialogs
       QT_QPA_PLATFORMTHEME: ""
-      # Suppress GTK accessibility module warnings
       GTK_A11Y: none
+      QTWEBENGINE_DISABLE_SANDBOX: "1"
 
 parts:
+  launcher:
+    plugin: dump
+    source: snap/local
+    organize:
+      parquet-explorer-launch: bin/parquet-explorer-launch
+
   parquet-explorer:
     plugin: python
     source: .
     python-packages:
       - PyQt6
+      - PyQt6-WebEngine
       - pyarrow
       - pandas
       - qdarkstyle
       - plotly
-      - PyQt6-WebEngine
     stage-packages:
+      # Python runtime
       - libpython3-stdlib
       - libpython3.12-minimal
       - libpython3.12-stdlib
+      # Chromium/system deps for PyQt6-WebEngine (Qt itself comes from pip wheels)
       - libnss3
       - libnspr4
       - libdbus-1-3
@@ -55,5 +72,31 @@ parts:
       - libxdamage1
       - libxi6
       - libxtst6
-      - libasound2
+      - libasound2t64
       - libpulse0
+      - libxss1
+      - libegl1
+      - libdrm2
+      - libgbm1
+      - libxcb1
+      - libxcb-xfixes0
+      - libxcb-shape0
+      - libxcb-cursor0
+      - libxkbcommon0
+      - libwayland-client0
+      - libwayland-cursor0
+      - libxkbfile1
+      - libatomic1
+
+    override-prime: |
+      craftctl default
+      mv "${CRAFT_PRIME}/bin/parquet-explorer" "${CRAFT_PRIME}/bin/parquet-explorer.bin"
+      # Ubuntu's libasound2 alias can resolve to the oss4 shim, which lacks WebEngine symbols.
+      rm -f "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/liboss4-salsa.so.2"*
+      rm -rf "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/oss4-libsalsa"
+      if [ -f "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/libasound.so.2.0.0" ]; then
+        ln -sf libasound.so.2.0.0 "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/libasound.so.2"
+      fi
+      # Drop any distro Qt libs that would override PyQt6's bundled runtime.
+      rm -f "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/libQt6"*.so*
+      rm -rf "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/qt6"
