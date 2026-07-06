@@ -1,7 +1,7 @@
 name: parquet-explorer
 title: Parquet Explorer
 base: core24
-version: '0.2.45'
+version: '0.2.46'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.
@@ -87,6 +87,33 @@ parts:
       - libwayland-cursor0
       - libxkbfile1
       - libatomic1
+      # OpenGL/Mesa + text/image codecs: pulled transitively on local builds but
+      # missing from clean LXD CI builds without explicit stage-packages.
+      - libgl1
+      - libgl1-mesa-dri
+      - libglx-mesa0
+      - libglx0
+      - libopengl0
+      - libvulkan1
+      - libharfbuzz0b
+      - libharfbuzz-subset0
+      - libgraphite2-3
+      - libminizip1t64
+      - libxslt1.1
+      - libdouble-conversion3
+      - libjpeg-turbo8
+      - libopenjp2-7
+      - libwebp7
+      - libwebpdemux2
+      - libwebpmux3
+      - libsharpyuv0
+      - libsnappy1v5
+      - liblcms2-2
+      - libmd4c0
+      - libxcb-glx0
+      - libxxf86vm1
+      - libxrandr2
+      - libxkbcommon-x11-0
 
     override-prime: |
       craftctl default

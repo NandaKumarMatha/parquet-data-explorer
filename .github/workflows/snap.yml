@@ -36,6 +36,22 @@ jobs:
         # the gnome extension needs build-snaps (e.g. mesa-2404) that fail on the runner host.
         snapcraft-args: pack
 
+    - name: Verify WebEngine runtime is bundled
+      run: |
+        set -euo pipefail
+        SNAP_FILE="${{ steps.build.outputs.snap }}"
+        LIST=$(unsquashfs -ll "$SNAP_FILE")
+        for path in \
+          'PyQt6/Qt6/libexec/QtWebEngineProcess' \
+          'libharfbuzz.so' \
+          'dri/i915_dri.so' \
+          'libGL.so'; do
+          echo "$LIST" | grep -q "$path" || {
+            echo "Missing required snap content: $path"
+            exit 1
+          }
+        done
+
     - name: Upload Snap Artifact
       uses: actions/upload-artifact@v5
       with:

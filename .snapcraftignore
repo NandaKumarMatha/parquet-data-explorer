@@ -1,0 +1,11 @@
+.git
+.github
+.gitignore
+tests
+*.snap
+__pycache__
+*.pyc
+.pytest_cache
+dist
+build
+*.spec

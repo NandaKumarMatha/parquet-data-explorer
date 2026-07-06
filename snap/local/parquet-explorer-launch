@@ -7,5 +7,10 @@ export LD_LIBRARY_PATH="$PYQT6_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 # WebEngine/Chromium needs this under strict snap confinement.
 export QTWEBENGINE_DISABLE_SANDBOX="${QTWEBENGINE_DISABLE_SANDBOX:-1}"
+export QTWEBENGINEPROCESS_PATH="$SNAP/lib/python3.12/site-packages/PyQt6/Qt6/libexec/QtWebEngineProcess"
+
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+  export QT_QPA_PLATFORM=xcb
+fi
 
 exec "$SNAP/bin/parquet-explorer.bin" "$@"
