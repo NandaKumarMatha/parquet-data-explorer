@@ -40,16 +40,16 @@ jobs:
       run: |
         set -euo pipefail
         SNAP_FILE="${{ steps.build.outputs.snap }}"
-        LIST=$(unsquashfs -ll "$SNAP_FILE")
+        unsquashfs -ll "$SNAP_FILE" > /tmp/snap-contents.txt
         for path in \
           'PyQt6/Qt6/libexec/QtWebEngineProcess' \
           'libharfbuzz.so' \
           'dri/i915_dri.so' \
           'libGL.so'; do
-          echo "$LIST" | grep -q "$path" || {
+          if ! grep -Fq "$path" /tmp/snap-contents.txt; then
             echo "Missing required snap content: $path"
             exit 1
-          }
+          fi
         done
 
     - name: Upload Snap Artifact
