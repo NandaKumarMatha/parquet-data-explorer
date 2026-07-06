@@ -1,7 +1,7 @@
 name: parquet-explorer
 title: Parquet Explorer
 base: core24
-version: '0.2.46'
+version: '0.2.47'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.
@@ -82,6 +82,16 @@ parts:
       - libxcb-xfixes0
       - libxcb-shape0
       - libxcb-cursor0
+      - libxcb-icccm4
+      - libxcb-keysyms1
+      - libxcb-util1
+      - libxcb-image0
+      - libxcb-randr0
+      - libxcb-render0
+      - libxcb-render-util0
+      - libxcb-shm0
+      - libxcb-sync1
+      - libxcb-xkb1
       - libxkbcommon0
       - libwayland-client0
       - libwayland-cursor0

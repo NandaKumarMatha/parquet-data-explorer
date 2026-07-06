@@ -44,6 +44,9 @@ jobs:
         for path in \
           'PyQt6/Qt6/libexec/QtWebEngineProcess' \
           'libharfbuzz.so' \
+          'libxcb-cursor.so' \
+          'libxcb-icccm.so' \
+          'libxcb-keysyms.so' \
           'dri/i915_dri.so' \
           'libGL.so'; do
           if ! grep -Fq "$path" /tmp/snap-contents.txt; then
