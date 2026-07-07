@@ -1,11 +1,14 @@
 #!/bin/sh
 set -e
 
-ARCH_TRIPLET="${SNAP_ARCH_TRIPLET:-${SNAP_ARCH:-amd64}-linux-gnu}"
-case "${SNAP_ARCH:-amd64}" in
-  amd64) ARCH_TRIPLET="x86_64-linux-gnu" ;;
-  arm64) ARCH_TRIPLET="aarch64-linux-gnu" ;;
-esac
+ARCH_TRIPLET="${SNAP_ARCH_TRIPLET:-}"
+if [ -z "$ARCH_TRIPLET" ]; then
+  case "${SNAP_ARCH:-amd64}" in
+    amd64) ARCH_TRIPLET="x86_64-linux-gnu" ;;
+    arm64) ARCH_TRIPLET="aarch64-linux-gnu" ;;
+    *) ARCH_TRIPLET="${SNAP_ARCH}-linux-gnu" ;;
+  esac
+fi
 
 PYQT6_LIB="$SNAP/lib/python3.12/site-packages/PyQt6/Qt6/lib"
 SNAP_USR_LIB="$SNAP/usr/lib/$ARCH_TRIPLET"
@@ -25,6 +28,6 @@ export QT_OPENGL="${QT_OPENGL:-software}"
 
 # GPU/Vulkan compositing often fails in strict snaps (dma_buf / gbm errors).
 # Software rendering is slower but reliable for Plotly charts.
-export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage}"
+export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage --disable-features=VizDisplayCompositor --use-gl=swiftshader}"
 
 exec "$SNAP/bin/parquet-explorer.bin" "$@"

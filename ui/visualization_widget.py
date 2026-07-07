@@ -1,7 +1,6 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QComboBox, QPushButton, QMessageBox)
 from PyQt6.QtCore import Qt, QUrl, QTimer
-from PyQt6.QtWebEngineWidgets import QWebEngineView
 from data.parquet_handler import VIZ_SAMPLE_MAX_ROWS
 import plotly.express as px
 import plotly.graph_objects as go
@@ -75,7 +74,8 @@ class VisualizationWidget(QWidget):
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
 
-        # Chart area using WebEngine for Plotly
+        # Chart area using WebEngine for Plotly (lazy import: env must be set in main.py first)
+        from PyQt6.QtWebEngineWidgets import QWebEngineView
         self.web_view = QWebEngineView()
         self.web_view.loadFinished.connect(self.on_load_finished)
         self.set_placeholder_text("Select data and click Plot to visualize")

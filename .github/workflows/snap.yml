@@ -48,7 +48,8 @@ jobs:
           'libxcb-icccm.so' \
           'libxcb-keysyms.so' \
           'dri/i915_dri.so' \
-          'libGL.so'; do
+          'libGL.so' \
+          'gbm/dri_gbm.so'; do
           if ! grep -Fq "$path" /tmp/snap-contents.txt; then
             echo "Missing required snap content: $path"
             exit 1

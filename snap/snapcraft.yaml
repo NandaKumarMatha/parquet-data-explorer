@@ -1,7 +1,7 @@
 name: parquet-explorer
 title: Parquet Explorer
 base: core24
-version: '0.2.48'
+version: '0.2.49'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.
@@ -42,7 +42,7 @@ apps:
       QT_QPA_PLATFORM: xcb
       QT_XCB_GL_INTEGRATION: none
       QT_OPENGL: software
-      QTWEBENGINE_CHROMIUM_FLAGS: "--disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage"
+      QTWEBENGINE_CHROMIUM_FLAGS: "--disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage --disable-features=VizDisplayCompositor --use-gl=swiftshader"
 
 parts:
   launcher:
@@ -145,7 +145,7 @@ parts:
         if [ ! -e "${gbm_dir}/dri_gbm.so" ]; then
           dri_gbm=$(find "${CRAFT_PRIME}/usr/lib/${triplet}" -name 'dri_gbm.so*' 2>/dev/null | head -1)
           if [ -n "$dri_gbm" ]; then
-            ln -sf "../$(basename "$(dirname "$dri_gbm")")/$(basename "$dri_gbm")" "${gbm_dir}/dri_gbm.so"
+            ln -sf "../dri/$(basename "$dri_gbm")" "${gbm_dir}/dri_gbm.so"
           fi
         fi
       done
