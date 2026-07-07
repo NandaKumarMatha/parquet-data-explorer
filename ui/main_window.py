@@ -7,7 +7,10 @@ from ui.commands import EditCommand, AddRowCommand, DeleteRowCommand, AddColumnC
 from ui.styles import get_dark_stylesheet, get_light_stylesheet
 
 import os
-from data.parquet_handler import load_parquet, save_parquet, get_metadata, get_row_count
+from data.parquet_handler import (
+    save_parquet, get_metadata, get_row_count, FULL_LOAD_WARN_ROWS,
+)
+from ui.load_worker import PageLoadWorker, FullDataLoadWorker
 from ui.visualization_widget import VisualizationWidget
 from ui.plot_config_widget import PlotConfigWidget
 
@@ -146,6 +149,8 @@ class DataFrameModel(QAbstractTableModel):
         col = self.df.columns[index.column()]
         self.main_df.loc[row_idx, col] = value
         self.df.loc[row_idx, col] = value
+        if self.main_window:
+            self.main_window.register_cell_edit(row_idx, col, value)
         self.dataChanged.emit(index, index)
         return True
 
@@ -215,6 +220,12 @@ class MainWindow(QMainWindow):
         self.page_size = 1000
         self.current_page = 1
         self.total_rows = 0
+        self.edited_cells = {}
+        self.full_data_mode = False
+        self._load_request_id = 0
+        self._page_load_worker = None
+        self._full_data_worker = None
+        self._loading = False
         self.create_pagination_controls()
 
         if file_path and os.path.exists(file_path):
@@ -493,34 +504,258 @@ class MainWindow(QMainWindow):
             self.stats_dock.show()
 
     def load_data(self, file_name, reset_page=True):
-        self.status_bar.showMessage("Loading...")
+        self._cancel_page_load()
+        self._load_request_id += 1
+        request_id = self._load_request_id
+
+        is_new_file = (
+            os.path.abspath(file_name) != os.path.abspath(self.current_file_path)
+            if self.current_file_path else True
+        )
+
+        if reset_page:
+            self.current_page = 1
+
+        self._set_loading_state(True, "Reading file metadata...")
         try:
-            self.total_rows = get_row_count(file_name)
-            
-            if reset_page:
-                self.current_page = 1
-            
-            offset = (self.current_page - 1) * self.page_size
-            limit = self.page_size
-            
-            self.df = load_parquet(file_name, offset=offset, limit=limit)
-            self.original_df = self.df.copy()
-            self.filtered_df = self.df
-            self.current_file_path = file_name
-            self.undo_stack.clear() # Clear undo stack on new data load
+            total_rows = get_row_count(file_name)
+        except Exception as e:
+            self._set_loading_state(False)
+            QMessageBox.critical(self, "Error", f"Failed to read file metadata: {str(e)}")
+            self.status_bar.showMessage("Error loading file")
+            return
+
+        self.total_rows = total_rows
+        self.current_file_path = file_name
+        if is_new_file:
+            self.edited_cells = {}
+            self.full_data_mode = False
+            self.undo_stack.clear()
             self.undo_stack.setClean()
             self._manual_dirty = False
+
+        self.update_pagination_controls()
+
+        offset = (self.current_page - 1) * self.page_size
+        limit = self.page_size
+        total_pages = max(1, (self.total_rows + self.page_size - 1) // self.page_size)
+        self.status_bar.showMessage(
+            f"Loading page {self.current_page}/{total_pages} ({self.total_rows:,} total rows)..."
+        )
+
+        worker = PageLoadWorker(file_name, offset, limit)
+        worker.finished.connect(
+            lambda df: self._on_page_load_finished(request_id, file_name, is_new_file, df)
+        )
+        worker.error.connect(
+            lambda msg: self._on_page_load_error(request_id, msg)
+        )
+        self._page_load_worker = worker
+        worker.start()
+
+    def _cancel_page_load(self):
+        if self._page_load_worker and self._page_load_worker.isRunning():
+            self._page_load_worker.wait(3000)
+        self._page_load_worker = None
+
+    def _set_loading_state(self, loading, message=None):
+        self._loading = loading
+        self.prev_btn.setEnabled(not loading and self.current_page > 1)
+        self.next_btn.setEnabled(
+            not loading and self.current_page < max(1, (self.total_rows + self.page_size - 1) // self.page_size)
+        )
+        self.page_size_combo.setEnabled(not loading)
+        self.query_button.setEnabled(not loading)
+        if message is not None:
+            self.status_bar.showMessage(message)
+
+    def _on_page_load_finished(self, request_id, file_name, is_new_file, df):
+        if request_id != self._load_request_id:
+            return
+
+        self._page_load_worker = None
+        self.df = df
+        self.original_df = self.df.copy()
+        self.filtered_df = self.df
+        self.update_table()
+        self.update_window_title()
+        self.update_pagination_controls()
+        self.plot_config_widget.set_columns(self.df.columns.tolist())
+        self._set_loading_state(
+            False,
+            f"Loaded {len(self.df):,} rows on page {self.current_page} (Total: {self.total_rows:,})",
+        )
+
+    def _on_page_load_error(self, request_id, message):
+        if request_id != self._load_request_id:
+            return
+
+        self._page_load_worker = None
+        self._set_loading_state(False, "Error loading file")
+        QMessageBox.critical(self, "Error", f"Failed to load file: {message}")
+
+    def _confirm_large_full_load(self, action_description="load the full dataset"):
+        if self.total_rows < FULL_LOAD_WARN_ROWS:
+            return True
+
+        choice = QMessageBox.warning(
+            self,
+            "Large File Warning",
+            f"This file has {self.total_rows:,} rows.\n\n"
+            f"{action_description.capitalize()} will load all data into memory and may be slow "
+            f"or fail if RAM is limited.\n\nContinue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return choice == QMessageBox.StandardButton.Yes
+
+    def _start_full_data_load(self, title, on_success, on_error=None, edited_cells=None):
+        if self._full_data_worker and self._full_data_worker.isRunning():
+            if on_error:
+                on_error("Another full-data operation is already in progress.")
+            return
+
+        progress = QProgressDialog(title, "Cancel", 0, max(self.total_rows, 1), self)
+        progress.setWindowTitle("Loading Data")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        progress.setAutoClose(True)
+        progress.setAutoReset(True)
+
+        worker = FullDataLoadWorker(
+            self.current_file_path,
+            edited_cells if edited_cells is not None else self.edited_cells,
+        )
+        worker.progress.connect(
+            lambda done, total: progress.setValue(min(done, progress.maximum()))
+        )
+        progress.canceled.connect(worker.cancel)
+
+        def cleanup():
+            progress.close()
+            self._full_data_worker = None
+
+        def handle_success(df):
+            cleanup()
+            on_success(df)
+
+        def handle_error(message):
+            cleanup()
+            if message != "Load cancelled":
+                QMessageBox.warning(self, "Load Error", message)
+            if on_error:
+                on_error(message)
+
+        worker.finished.connect(handle_success)
+        worker.error.connect(handle_error)
+        self._full_data_worker = worker
+        progress.show()
+        worker.start()
+
+    def _get_full_dataframe_blocking(self, title, skip_confirm=False):
+        if not self.current_file_path or not self.is_paginated_view():
+            return self.df.copy(), None
+
+        if not skip_confirm and not self._confirm_large_full_load(title):
+            return None, "cancelled"
+
+        result = {"df": None, "error": None}
+        loop = QEventLoop()
+
+        def on_success(df):
+            result["df"] = df
+            loop.quit()
+
+        def on_error(message):
+            result["error"] = message
+            loop.quit()
+
+        self._start_full_data_load(title, on_success, on_error)
+        loop.exec()
+        return result["df"], result["error"]
+
+    def _with_full_dataframe(self, title, action_description, on_ready):
+        if not self.current_file_path:
+            on_ready(self.df.copy())
+            return
+
+        if not self.is_paginated_view():
+            on_ready(self.df.copy())
+            return
+
+        if not self._confirm_large_full_load(action_description):
+            return
+
+        self._start_full_data_load(title, on_ready)
+
+    def is_paginated_view(self):
+        return bool(self.current_file_path) and not self.full_data_mode and self.total_rows > len(self.df)
+
+    def register_cell_edit(self, row_idx, col_name, value):
+        if row_idx not in self.edited_cells:
+            self.edited_cells[row_idx] = {}
+        self.edited_cells[row_idx][col_name] = value
+        self._manual_dirty = True
+        self.update_window_title()
+
+    def _get_full_dataframe_for_operations(self):
+        if not self.current_file_path or not self.is_paginated_view():
+            return self.df.copy()
+
+        full_df, error = self._get_full_dataframe_blocking("Preparing data...")
+        if error or full_df is None:
+            raise RuntimeError(error or "Full data load was cancelled.")
+        return full_df
+
+    def _ensure_full_data_mode_for_structural_edit(self):
+        if not self.is_paginated_view():
+            return True
+
+        if not self._confirm_large_full_load("switch to full-data editing"):
+            return False
+
+        choice = QMessageBox.question(
+            self,
+            "Switch to Full Data Editing",
+            "Row/column edits require the full dataset. Load all rows now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if choice != QMessageBox.StandardButton.Yes:
+            return False
+
+        full_df, error = self._get_full_dataframe_blocking(
+            "Loading full dataset for editing...",
+            skip_confirm=True,
+        )
+        if error == "cancelled" or full_df is None:
+            return False
+        if error:
+            QMessageBox.warning(self, "Full Data Load Failed", error)
+            return False
+
+        try:
+            self.df = full_df
+            self.filtered_df = self.df
+            self.original_df = self.df.copy()
+            self.full_data_mode = True
+            self.current_page = 1
+            self.total_rows = len(self.df)
+            self.page_size = max(self.page_size, len(self.df) if len(self.df) > 0 else self.page_size)
+            self.page_size_combo.blockSignals(True)
+            self.page_size_combo.setCurrentText(str(self.page_size))
+            self.page_size_combo.blockSignals(False)
+            self.edited_cells = {}
             self.update_table()
-            self.update_window_title()
             self.update_pagination_controls()
-            
-            # Sync columns to plot config
-            self.plot_config_widget.set_columns(self.df.columns.tolist())
-            
-            self.status_bar.showMessage(f"Loaded {len(self.df)} rows (Total: {self.total_rows})")
+            self.status_bar.showMessage(f"Loaded full dataset for editing ({len(self.df):,} rows)", 4000)
+            return True
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load file: {str(e)}")
-            self.status_bar.showMessage("Error loading file")
+            QMessageBox.warning(
+                self,
+                "Full Data Load Failed",
+                f"Could not load full dataset for structural editing: {str(e)}",
+            )
+            return False
 
     def refresh_view_for_cell(self, row_idx, col_name):
         # row_idx is the DataFrame Index Label, not position
@@ -576,14 +811,26 @@ class MainWindow(QMainWindow):
             self.table.setColumnWidth(col, min(self.table.columnWidth(col), max_col_width))
         self.row_col_label.setText(f"Rows: {len(self.filtered_df)}, Columns: {len(self.filtered_df.columns)}")
         self.update_stats()
-        self.visualization_widget.set_dataframe(self.filtered_df)
+        self.visualization_widget.set_dataframe(self.filtered_df, total_rows=self.total_rows)
+
+    def _stats_scope_label(self):
+        if self.df.empty:
+            return ""
+        if self.full_data_mode:
+            return f"Statistics (full dataset: {len(self.df):,} rows)\n\n"
+        start = (self.current_page - 1) * self.page_size + 1
+        end = min(self.current_page * self.page_size, self.total_rows)
+        return (
+            f"Statistics (current page: rows {start:,}-{end:,} of {self.total_rows:,} total)\n\n"
+        )
 
     def update_stats(self):
         if self.df.empty:
             self.stats_text.setPlainText("No data loaded.")
             return
         desc = self.df.describe(include='all')
-        text = "Column Statistics:\n\n"
+        text = self._stats_scope_label()
+        text += "Column Statistics:\n\n"
         for col in self.df.columns:
             text += f"{col}:\n"
             if col in desc.columns:
@@ -607,9 +854,10 @@ class MainWindow(QMainWindow):
     def save_file(self):
         try:
             if self.current_file_path:
-                save_parquet(self.df, self.current_file_path)
+                save_parquet(self._get_full_dataframe_for_operations(), self.current_file_path)
                 self.undo_stack.setClean()
                 self._manual_dirty = False
+                self.edited_cells = {}
                 self.status_bar.showMessage("Saved", 3000)
                 self.update_window_title()
                 return True
@@ -657,6 +905,7 @@ class MainWindow(QMainWindow):
         self.original_df = None
         self.filtered_df = self.df
         self.current_file_path = None
+        self.edited_cells = {}
         self.undo_stack.clear()
         self.update_table()
         self.update_window_title()
@@ -665,31 +914,61 @@ class MainWindow(QMainWindow):
     def export_file(self):
         formats = ["CSV", "JSON", "Excel"]
         format, ok = QInputDialog.getItem(self, "Export Format", "Choose format:", formats, 0, False)
-        if ok:
-            ext = format.lower()
-            file_name, _ = QFileDialog.getSaveFileName(self, f"Export to {format}", "", f"{format} Files (*.{ext})")
-            if file_name:
+        if not ok:
+            return
+
+        ext = format.lower()
+        file_name, _ = QFileDialog.getSaveFileName(self, f"Export to {format}", "", f"{format} Files (*.{ext})")
+        if not file_name:
+            return
+
+        def do_export(export_df):
+            try:
                 if format == "CSV":
-                    self.df.to_csv(file_name, index=False)
+                    export_df.to_csv(file_name, index=False)
                 elif format == "JSON":
-                    self.df.to_json(file_name, orient='records')
+                    export_df.to_json(file_name, orient='records')
                 elif format == "Excel":
-                    self.df.to_excel(file_name, index=False)
-                self.status_bar.showMessage("Exported")
+                    export_df.to_excel(file_name, index=False)
+                self.status_bar.showMessage("Exported", 3000)
+            except Exception as e:
+                QMessageBox.critical(self, "Export Error", f"Failed to export file: {str(e)}")
+
+        self._with_full_dataframe(
+            "Preparing export...",
+            "export the full dataset",
+            do_export,
+        )
 
     def execute_query(self):
         query = self.query_edit.text().strip()
         if not query:
             return
-        try:
-            # Use pandas query method for filtering
-            # Example: column_name > 100, column_name == 'value'
-            result = self.df.query(query)
-            self.filtered_df = result
-            self.update_table()
-            self.status_bar.showMessage("Query executed")
-        except Exception as e:
-            QMessageBox.warning(self, "Query Error", f"Invalid pandas query: {str(e)}\n\nExample: column_name > 100 or column_name == 'value'")
+
+        def run_query(source_df):
+            try:
+                result = source_df.query(query)
+                self.full_data_mode = True
+                self.current_page = 1
+                self.total_rows = len(result)
+                self.df = result.copy()
+                self.filtered_df = result
+                self.edited_cells = {}
+                self.update_table()
+                self.update_pagination_controls()
+                self.status_bar.showMessage(f"Query matched {len(result):,} rows", 3000)
+            except Exception as e:
+                QMessageBox.warning(
+                    self,
+                    "Query Error",
+                    f"Invalid pandas query: {str(e)}\n\nExample: column_name > 100 or column_name == 'value'",
+                )
+
+        self._with_full_dataframe(
+            "Loading data for query...",
+            "run this query across the full dataset",
+            run_query,
+        )
 
     def reset_data(self):
         if self.original_df is not None:
@@ -727,6 +1006,8 @@ class MainWindow(QMainWindow):
         menu.exec(self.table.horizontalHeader().viewport().mapToGlobal(pos))
 
     def add_row(self):
+        if not self._ensure_full_data_mode_for_structural_edit():
+            return
         selection = self.table.selectionModel().selectedRows()
         row_idx = selection[0].row() if selection else len(self.df)
         command = AddRowCommand(self, row_idx)
@@ -735,6 +1016,8 @@ class MainWindow(QMainWindow):
         self.update_window_title()
 
     def delete_selected_rows(self):
+        if not self._ensure_full_data_mode_for_structural_edit():
+            return
         selection = self.table.selectionModel().selectedRows()
         if not selection:
             return
@@ -752,6 +1035,8 @@ class MainWindow(QMainWindow):
             self.update_window_title()
 
     def add_column(self):
+        if not self._ensure_full_data_mode_for_structural_edit():
+            return
         name, ok = QInputDialog.getText(self, "Add Column", "Column Name:")
         if ok and name:
             if name in self.df.columns:
@@ -767,6 +1052,8 @@ class MainWindow(QMainWindow):
                 self.update_window_title()
 
     def delete_selected_columns(self):
+        if not self._ensure_full_data_mode_for_structural_edit():
+            return
         selection = self.table.selectionModel().selectedColumns()
         if not selection:
             # Check if cells are selected and get columns from them
@@ -789,6 +1076,11 @@ class MainWindow(QMainWindow):
             self.update_window_title()
 
     def closeEvent(self, event):
+        self._cancel_page_load()
+        if self._full_data_worker and self._full_data_worker.isRunning():
+            self._full_data_worker.cancel()
+            self._full_data_worker.wait(3000)
+
         # Force any active edit to commit
         if self.table.model():
             self.table.clearFocus() 

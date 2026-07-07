@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QComboBox, QPushButton, QMessageBox)
 from PyQt6.QtCore import Qt, QUrl, QTimer
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from data.parquet_handler import VIZ_SAMPLE_MAX_ROWS
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
@@ -13,6 +14,8 @@ class VisualizationWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.df = pd.DataFrame()
+        self._source_row_count = 0
+        self._sampled = False
         self.temp_files = []
         self.current_theme = "dark" # Default
         self.advanced_config = {
@@ -89,8 +92,14 @@ class VisualizationWidget(QWidget):
         text_color = "#888" if actual_theme == "dark" else "#666"
         self.web_view.setHtml(f"<html><body style='background-color: {bg_color}; color: {text_color}; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; margin: 0;'><h2>{text}</h2></body></html>")
 
-    def set_dataframe(self, df):
-        self.df = df
+    def set_dataframe(self, df, total_rows=None):
+        self._source_row_count = total_rows if total_rows is not None else len(df)
+        if len(df) > VIZ_SAMPLE_MAX_ROWS:
+            self.df = df.head(VIZ_SAMPLE_MAX_ROWS).copy()
+            self._sampled = True
+        else:
+            self.df = df
+            self._sampled = False
         self.update_column_combo_boxes()
 
     def update_column_combo_boxes(self):
@@ -140,6 +149,14 @@ class VisualizationWidget(QWidget):
         if self.df.empty:
             QMessageBox.warning(self, "No Data", "No data to load.")
             return
+
+        if self._sampled:
+            QMessageBox.information(
+                self,
+                "Sampled Data",
+                f"Plotting the first {len(self.df):,} rows "
+                f"(of {self._source_row_count:,} available) to keep the app responsive.",
+            )
 
         # Disable UI and show loading
         self.plot_button.setEnabled(False)
