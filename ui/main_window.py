@@ -13,6 +13,7 @@ from data.parquet_handler import (
 from ui.load_worker import PageLoadWorker, FullDataLoadWorker
 from ui.visualization_widget import VisualizationWidget
 from ui.plot_config_widget import PlotConfigWidget
+from utils.recent_files import add_recent_file, clear_recent_files, load_recent_files
 
 class StyledComboBox(QComboBox):
     """Custom combo box with visible dropdown arrow indicator"""
@@ -103,11 +104,18 @@ class DataFrameModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
                 return self.df.columns[section]
-            return str(section + 1)
+            row_id = self.df.index[section]
+            if isinstance(row_id, (int, float)) and row_id == int(row_id):
+                return str(int(row_id) + 1)
+            return str(row_id)
         elif role == Qt.ItemDataRole.ToolTipRole:
             if orientation == Qt.Orientation.Horizontal:
                 meta = get_metadata(self.df, section)
                 return f"Type: {meta['type']}, Nullable: {meta['nullable']}"
+            row_id = self.df.index[section]
+            if isinstance(row_id, (int, float)) and row_id == int(row_id):
+                return f"Row {int(row_id) + 1}"
+            return f"Row {row_id}"
 
     def setData(self, index, value, role):
         if role == Qt.ItemDataRole.EditRole:
@@ -226,6 +234,10 @@ class MainWindow(QMainWindow):
         self._page_load_worker = None
         self._full_data_worker = None
         self._loading = False
+        self._page_jump_debounce_ms = 1500
+        self._page_jump_timer = QTimer(self)
+        self._page_jump_timer.setSingleShot(True)
+        self._page_jump_timer.timeout.connect(self._apply_debounced_page_jump)
         self.create_pagination_controls()
 
         if file_path and os.path.exists(file_path):
@@ -243,6 +255,11 @@ class MainWindow(QMainWindow):
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
+
+        self.recent_files_menu = file_menu.addMenu("Recent Files")
+        self.recent_files_menu.aboutToShow.connect(self._populate_recent_files_menu)
+
+        file_menu.addSeparator()
         save_action = QAction("Save", self)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self.save_file)
@@ -288,6 +305,11 @@ class MainWindow(QMainWindow):
         self.stats_action.setChecked(True)
         self.stats_action.triggered.connect(lambda: self.stats_dock.setVisible(self.stats_action.isChecked()))
         view_menu.addAction(self.stats_action)
+
+        reset_sort_action = QAction("Reset Sort Order", self)
+        reset_sort_action.setShortcut(QKeySequence("Ctrl+Shift+R"))
+        reset_sort_action.triggered.connect(self.clear_table_sort)
+        view_menu.addAction(reset_sort_action)
         
         theme_menu = view_menu.addMenu("Theme")
         
@@ -345,6 +367,16 @@ class MainWindow(QMainWindow):
     def select_all(self):
         self.table.selectAll()
 
+    def clear_table_sort(self):
+        header = self.table.horizontalHeader()
+        was_sorting = self.table.isSortingEnabled()
+        self.table.setSortingEnabled(False)
+        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+        self.proxy.invalidate()
+        if was_sorting:
+            self.table.setSortingEnabled(True)
+        self.status_bar.showMessage("Sort cleared — original row order restored", 2500)
+
     def create_table(self):
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
@@ -352,6 +384,7 @@ class MainWindow(QMainWindow):
         self.table = QTableView()
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
+        self.table.horizontalHeader().setSortIndicatorClearable(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setShowGrid(True)
@@ -435,16 +468,29 @@ class MainWindow(QMainWindow):
         self.prev_btn.setFixedSize(30, 24)
         self.prev_btn.setToolTip("Previous Page")
         self.prev_btn.clicked.connect(lambda: self.change_page(-1))
-        
-        self.page_label = QLabel("Page 1")
-        
+
+        page_text = QLabel("Page")
+        self.page_input = QSpinBox()
+        self.page_input.setMinimum(1)
+        self.page_input.setMaximum(1)
+        self.page_input.setFixedWidth(64)
+        self.page_input.setToolTip("Jump to page (applies 1.5s after you stop typing, or press Enter)")
+        page_line_edit = self.page_input.lineEdit()
+        page_line_edit.textChanged.connect(self._schedule_page_jump)
+        page_line_edit.returnPressed.connect(self._apply_page_jump_now)
+        page_line_edit.editingFinished.connect(self._apply_page_jump_now)
+
+        self.page_total_label = QLabel("/ 1")
+
         self.next_btn = QPushButton("▶")
         self.next_btn.setFixedSize(30, 24)
         self.next_btn.setToolTip("Next Page")
         self.next_btn.clicked.connect(lambda: self.change_page(1))
-        
+
         layout.addWidget(self.prev_btn)
-        layout.addWidget(self.page_label)
+        layout.addWidget(page_text)
+        layout.addWidget(self.page_input)
+        layout.addWidget(self.page_total_label)
         layout.addWidget(self.next_btn)
         container.setLayout(layout)
         
@@ -458,17 +504,60 @@ class MainWindow(QMainWindow):
             self.load_data(self.current_file_path, reset_page=False)
 
     def change_page(self, delta):
-        self.current_page += delta
-        if self.current_file_path:
-            self.load_data(self.current_file_path, reset_page=False)
+        self._page_jump_timer.stop()
+        self.go_to_page(self.current_page + delta)
+
+    def _schedule_page_jump(self):
+        if self.page_input.signalsBlocked():
+            return
+        self._page_jump_timer.start(self._page_jump_debounce_ms)
+
+    def _apply_debounced_page_jump(self):
+        self._apply_page_jump_now()
+
+    def _apply_page_jump_now(self):
+        if self.page_input.signalsBlocked():
+            return
+        self._page_jump_timer.stop()
+
+        text = self.page_input.lineEdit().text().strip()
+        if not text:
+            return
+        try:
+            page = int(text)
+        except ValueError:
+            return
+        self.go_to_page(page)
+
+    def go_to_page(self, page):
+        self._page_jump_timer.stop()
+        if not self.current_file_path or self._loading:
+            return
+
+        total_pages = max(1, (self.total_rows + self.page_size - 1) // self.page_size)
+        page = max(1, min(int(page), total_pages))
+
+        if page == self.current_page:
+            self.page_input.blockSignals(True)
+            self.page_input.setValue(page)
+            self.page_input.blockSignals(False)
+            return
+
+        self.current_page = page
+        self.load_data(self.current_file_path, reset_page=False)
 
     def update_pagination_controls(self):
-        import math
-        total_pages = math.ceil(self.total_rows / self.page_size) if self.total_rows > 0 else 1
-        
-        self.prev_btn.setEnabled(self.current_page > 1)
-        self.next_btn.setEnabled(self.current_page < total_pages)
-        self.page_label.setText(f"Page {self.current_page} / {total_pages}")
+        total_pages = max(1, (self.total_rows + self.page_size - 1) // self.page_size)
+
+        self.prev_btn.setEnabled(not self._loading and self.current_page > 1)
+        self.next_btn.setEnabled(not self._loading and self.current_page < total_pages)
+
+        self.page_input.blockSignals(True)
+        self.page_input.setMaximum(total_pages)
+        self.page_input.setValue(self.current_page)
+        self.page_input.blockSignals(False)
+        self.page_total_label.setText(f"/ {total_pages}")
+        self.page_input.setEnabled(not self._loading and total_pages > 1)
 
     def filter_data(self):
         text = self.search_edit.text().lower()
@@ -482,6 +571,35 @@ class MainWindow(QMainWindow):
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Parquet File", "", "Parquet Files (*.parquet)")
         if file_name:
             self.load_data(file_name)
+
+    def _populate_recent_files_menu(self):
+        self.recent_files_menu.clear()
+        recent_paths = load_recent_files()
+
+        if not recent_paths:
+            empty_action = QAction("No recent files", self)
+            empty_action.setEnabled(False)
+            self.recent_files_menu.addAction(empty_action)
+            return
+
+        for path in recent_paths:
+            action = QAction(os.path.basename(path), self)
+            action.setToolTip(path)
+            action.setStatusTip(path)
+            if os.path.exists(path):
+                action.triggered.connect(lambda checked=False, p=path: self.load_data(p))
+            else:
+                action.setEnabled(False)
+            self.recent_files_menu.addAction(action)
+
+        self.recent_files_menu.addSeparator()
+        clear_action = QAction("Clear Recent Files", self)
+        clear_action.triggered.connect(self._clear_recent_files)
+        self.recent_files_menu.addAction(clear_action)
+
+    def _clear_recent_files(self):
+        clear_recent_files()
+        self.status_bar.showMessage("Recent files cleared", 2000)
 
     def create_plot_config_widget(self):
         self.plot_config_widget = PlotConfigWidget()
@@ -565,6 +683,9 @@ class MainWindow(QMainWindow):
             not loading and self.current_page < max(1, (self.total_rows + self.page_size - 1) // self.page_size)
         )
         self.page_size_combo.setEnabled(not loading)
+        self.page_input.setEnabled(
+            not loading and max(1, (self.total_rows + self.page_size - 1) // self.page_size) > 1
+        )
         self.query_button.setEnabled(not loading)
         if message is not None:
             self.status_bar.showMessage(message)
@@ -581,6 +702,7 @@ class MainWindow(QMainWindow):
         self.update_window_title()
         self.update_pagination_controls()
         self.plot_config_widget.set_columns(self.df.columns.tolist())
+        add_recent_file(file_name)
         self._set_loading_state(
             False,
             f"Loaded {len(self.df):,} rows on page {self.current_page} (Total: {self.total_rows:,})",
@@ -994,6 +1116,11 @@ class MainWindow(QMainWindow):
 
     def show_column_context_menu(self, pos):
         menu = QMenu(self)
+
+        reset_sort_act = QAction("Reset Sort Order", self)
+        reset_sort_act.triggered.connect(self.clear_table_sort)
+        menu.addAction(reset_sort_act)
+        menu.addSeparator()
         
         add_col_act = QAction("Add Column", self)
         add_col_act.triggered.connect(self.add_column)

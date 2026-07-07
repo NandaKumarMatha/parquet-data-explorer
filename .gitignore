@@ -1,4 +1,11 @@
 venv/
+.venv/
+*.assert
+
+# Agent / AI instructions (local only, not committed)
+AGENTS.md
+.cursor/
+.github/copilot-instructions.md
 __pycache__/
 *.pyc
 dist/
