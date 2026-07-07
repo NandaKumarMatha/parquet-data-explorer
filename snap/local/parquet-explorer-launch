@@ -21,13 +21,10 @@ export LIBEGL_DRIVERS_PATH="$SNAP_USR_LIB/dri"
 export QTWEBENGINE_DISABLE_SANDBOX="${QTWEBENGINE_DISABLE_SANDBOX:-1}"
 export QTWEBENGINEPROCESS_PATH="$SNAP/lib/python3.12/site-packages/PyQt6/Qt6/libexec/QtWebEngineProcess"
 
-# Wayland is often unavailable under strict snap confinement; xcb is reliable on X11.
+# xcb + GLX from staged Mesa libs; do not set QT_XCB_GL_INTEGRATION=none (breaks Qt/WebEngine).
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
-export QT_XCB_GL_INTEGRATION="${QT_XCB_GL_INTEGRATION:-none}"
-export QT_OPENGL="${QT_OPENGL:-software}"
 
-# GPU/Vulkan compositing often fails in strict snaps (dma_buf / gbm errors).
-# Software rendering is slower but reliable for Plotly charts.
-export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage --disable-features=VizDisplayCompositor}"
+# Disable GPU compositing in Chromium only (WebEngine subprocess).
+export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage}"
 
 exec "$SNAP/bin/parquet-explorer.bin" "$@"

@@ -1,7 +1,7 @@
 name: parquet-explorer
 title: Parquet Explorer
 base: core24
-version: '0.2.50'
+version: '0.2.51'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.
@@ -40,9 +40,7 @@ apps:
       GTK_A11Y: none
       QTWEBENGINE_DISABLE_SANDBOX: "1"
       QT_QPA_PLATFORM: xcb
-      QT_XCB_GL_INTEGRATION: none
-      QT_OPENGL: software
-      QTWEBENGINE_CHROMIUM_FLAGS: "--disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage --disable-features=VizDisplayCompositor"
+      QTWEBENGINE_CHROMIUM_FLAGS: "--disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage"
 
 parts:
   launcher:

@@ -1,13 +1,12 @@
 import os
 
-# Shared Chromium flags for confined / snap environments where GPU dma_buf fails.
+# Chromium flags for WebEngine only — do not disable Qt/X11 GLX (needed for QRhi).
 WEBENGINE_CHROMIUM_FLAGS = (
     "--disable-gpu "
     "--disable-gpu-compositing "
     "--disable-vulkan "
     "--no-sandbox "
-    "--disable-dev-shm-usage "
-    "--disable-features=VizDisplayCompositor"
+    "--disable-dev-shm-usage"
 )
 
 
@@ -16,6 +15,4 @@ def configure_webengine_env():
     os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", WEBENGINE_CHROMIUM_FLAGS)
 
     if os.environ.get("SNAP"):
-        os.environ.setdefault("QT_OPENGL", "software")
-        os.environ.setdefault("QT_XCB_GL_INTEGRATION", "none")
         os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")

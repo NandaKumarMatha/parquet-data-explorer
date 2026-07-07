@@ -16,8 +16,6 @@ from utils.path_helper import get_resource_path
 
 def main():
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
-    if os.environ.get("SNAP"):
-        QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseSoftwareOpenGL)
 
     from ui.main_window import MainWindow
 
