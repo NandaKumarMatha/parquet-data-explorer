@@ -35,6 +35,9 @@ class EditCommand(QUndoCommand):
              if self.row_label in self.mw.model.main_df.index:
                  self.mw.model.main_df.at[self.row_label, self.col_name] = value
 
+        if hasattr(self.mw, "register_cell_edit"):
+            self.mw.register_cell_edit(self.row_label, self.col_name, value)
+
         self.mw.refresh_view_for_cell(self.row_label, self.col_name)
 
 class AddRowCommand(QUndoCommand):

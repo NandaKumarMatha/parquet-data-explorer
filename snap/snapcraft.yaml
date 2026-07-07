@@ -1,7 +1,7 @@
 name: parquet-explorer
 title: Parquet Explorer
 base: core24
-version: '0.2.47'
+version: '0.2.48'
 summary: A simple Parquet file viewer
 description: |
   A PyQt6 based application to view and explore Parquet files.
@@ -39,6 +39,10 @@ apps:
       QT_QPA_PLATFORMTHEME: ""
       GTK_A11Y: none
       QTWEBENGINE_DISABLE_SANDBOX: "1"
+      QT_QPA_PLATFORM: xcb
+      QT_XCB_GL_INTEGRATION: none
+      QT_OPENGL: software
+      QTWEBENGINE_CHROMIUM_FLAGS: "--disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage"
 
 parts:
   launcher:
@@ -134,6 +138,17 @@ parts:
       if [ -f "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/libasound.so.2.0.0" ]; then
         ln -sf libasound.so.2.0.0 "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/libasound.so.2"
       fi
+      # Ensure Mesa GBM backend is available inside the snap (not host paths).
+      for triplet in x86_64-linux-gnu aarch64-linux-gnu; do
+        gbm_dir="${CRAFT_PRIME}/usr/lib/${triplet}/gbm"
+        mkdir -p "$gbm_dir"
+        if [ ! -e "${gbm_dir}/dri_gbm.so" ]; then
+          dri_gbm=$(find "${CRAFT_PRIME}/usr/lib/${triplet}" -name 'dri_gbm.so*' 2>/dev/null | head -1)
+          if [ -n "$dri_gbm" ]; then
+            ln -sf "../$(basename "$(dirname "$dri_gbm")")/$(basename "$dri_gbm")" "${gbm_dir}/dri_gbm.so"
+          fi
+        fi
+      done
       # Drop any distro Qt libs that would override PyQt6's bundled runtime.
       rm -f "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/libQt6"*.so*
       rm -rf "${CRAFT_PRIME}/usr/lib/x86_64-linux-gnu/qt6"
