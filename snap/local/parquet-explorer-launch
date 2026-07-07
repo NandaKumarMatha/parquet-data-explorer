@@ -14,17 +14,20 @@ PYQT6_LIB="$SNAP/lib/python3.12/site-packages/PyQt6/Qt6/lib"
 SNAP_USR_LIB="$SNAP/usr/lib/$ARCH_TRIPLET"
 SNAP_LIBS="$SNAP_USR_LIB:$SNAP_USR_LIB/gbm:$SNAP/usr/lib:$SNAP/lib"
 
-export LD_LIBRARY_PATH="$PYQT6_LIB:$SNAP_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# Do not inherit host LD_LIBRARY_PATH — it pulls host Mesa paths that fail in confinement.
+export LD_LIBRARY_PATH="$PYQT6_LIB:$SNAP_LIBS${SNAP_LIBRARY_PATH:+:$SNAP_LIBRARY_PATH}"
 export LIBGL_DRIVERS_PATH="$SNAP_USR_LIB/dri"
 export LIBEGL_DRIVERS_PATH="$SNAP_USR_LIB/dri"
 
+# Stop Vulkan loader from probing host ICDs (Chromium also gets --disable-vulkan).
+unset VK_ICD_FILENAMES
+unset VK_DRIVER_FILES
+unset VK_LOADER_LAYERS_ENABLE
+export VK_LOADER_DISABLE_SELECT=1
+
 export QTWEBENGINE_DISABLE_SANDBOX="${QTWEBENGINE_DISABLE_SANDBOX:-1}"
 export QTWEBENGINEPROCESS_PATH="$SNAP/lib/python3.12/site-packages/PyQt6/Qt6/libexec/QtWebEngineProcess"
-
-# xcb + GLX from staged Mesa libs; do not set QT_XCB_GL_INTEGRATION=none (breaks Qt/WebEngine).
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
-
-# Disable GPU compositing in Chromium only (WebEngine subprocess).
 export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---disable-gpu --disable-gpu-compositing --disable-vulkan --no-sandbox --disable-dev-shm-usage}"
 
 exec "$SNAP/bin/parquet-explorer.bin" "$@"

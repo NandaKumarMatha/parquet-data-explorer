@@ -16,3 +16,6 @@ def configure_webengine_env():
 
     if os.environ.get("SNAP"):
         os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
+        os.environ["VK_ICD_FILENAMES"] = ""
+        os.environ.pop("VK_DRIVER_FILES", None)
+        os.environ.setdefault("VK_LOADER_DISABLE_SELECT", "1")
