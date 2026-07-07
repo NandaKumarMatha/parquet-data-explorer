@@ -7,8 +7,7 @@ WEBENGINE_CHROMIUM_FLAGS = (
     "--disable-vulkan "
     "--no-sandbox "
     "--disable-dev-shm-usage "
-    "--disable-features=VizDisplayCompositor "
-    "--use-gl=swiftshader"
+    "--disable-features=VizDisplayCompositor"
 )
 
 

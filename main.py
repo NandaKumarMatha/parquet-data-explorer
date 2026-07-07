@@ -9,10 +9,13 @@ import sys
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
+# WebEngine must be imported before QApplication is constructed.
+from PyQt6.QtWebEngineWidgets import QWebEngineView  # noqa: F401
 from utils.path_helper import get_resource_path
 
 
 def main():
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     if os.environ.get("SNAP"):
         QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseSoftwareOpenGL)
 
