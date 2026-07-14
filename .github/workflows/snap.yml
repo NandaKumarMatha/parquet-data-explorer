@@ -22,11 +22,14 @@ jobs:
       id: vars
       run: echo "suffix=$(echo '${{ github.ref_name }}' | sed 's#[/\\:*?"<>|]#-#g')" >> "$GITHUB_OUTPUT"
 
-    - name: Read snap version
+    - name: Read app version
       id: version
       run: |
-        VERSION=$(grep -E '^version:' snap/snapcraft.yaml | head -1 | sed -E "s/^version:[[:space:]]*['\"]?([^'\"]+)['\"]?/\1/")
+        VERSION=$(grep -E '^APP_VERSION = ' utils/app_info.py | head -1 | sed -E 's/^APP_VERSION = "([^"]+)"/\1/')
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Sync packaging metadata from utils/app_info.py
+      run: python3 scripts/sync_app_info.py
 
     - name: Build Snap
       uses: snapcore/action-build@v1
@@ -112,7 +115,7 @@ jobs:
         EDGE_REV=$(channel_field edge 5 || true)
         BETA_REV=$(channel_field beta 5 || true)
 
-        echo "New version (snapcraft.yaml): $NEW_VERSION"
+        echo "New version (utils/app_info.py): $NEW_VERSION"
         echo "Current edge version: ${EDGE_VERSION:-<none>} (rev ${EDGE_REV:-none})"
 
         if [[ "$NEW_VERSION" == "${EDGE_VERSION:-}" ]]; then

@@ -4,14 +4,20 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>Parquet Explorer</name>
-  <summary>Explore and view Parquet files with ease</summary>
+  <summary>Official Parquet Explorer — view and edit Parquet files</summary>
+  <developer_name>Nanda Kumar Matha</developer_name>
   <description>
     <p>
-      Parquet Explorer is a lightweight PyQt6-based utility for data scientists and engineers 
-      to quickly open and inspect Apache Parquet files without needing a full-blown notebook environment.
+      Official Parquet Explorer by Nanda Kumar Matha. This is the authoritative
+      desktop app for opening, browsing, editing, filtering, and visualizing
+      Apache Parquet files.
+    </p>
+    <p>
+      Install only the official package named parquet-explorer. Unofficial forks
+      or lookalike listings are not affiliated with this project.
     </p>
   </description>
-  <url type="homepage">https://github.com/NandaKumarMatha/parquet-data-explorer</url>
+  <url type="homepage">https://nandakumarmatha.github.io/</url>
   <url type="bugtracker">https://github.com/NandaKumarMatha/parquet-data-explorer/issues</url>
   <url type="vcs-browser">https://github.com/NandaKumarMatha/parquet-data-explorer</url>
   <categories>
@@ -21,6 +27,6 @@
   </categories>
   <launchable type="desktop-id">parquet-explorer.desktop</launchable>
   <releases>
-    <release version="0.2.1" date="2026-02-22" />
+    <release version="0.2.53" date="2026-07-14" />
   </releases>
 </component>
