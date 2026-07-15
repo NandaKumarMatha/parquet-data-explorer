@@ -184,14 +184,14 @@ jobs:
 
         # Tag pushes authenticated with GITHUB_TOKEN do not start other workflows.
         # Explicitly dispatch Release (workflow_dispatch is allowed).
-        DEFAULT_BRANCH="master"
-        if git rev-parse --verify origin/main >/dev/null 2>&1 && \
-           ! git rev-parse --verify origin/master >/dev/null 2>&1; then
-          DEFAULT_BRANCH="main"
+        # Filename on disk is lowercase: release.yml (GitHub API is case-sensitive).
+        DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+        if [ -z "$DEFAULT_BRANCH" ]; then
+          DEFAULT_BRANCH="master"
         fi
 
-        gh workflow run Release.yml \
+        gh workflow run release.yml \
           --repo "${{ github.repository }}" \
           --ref "${DEFAULT_BRANCH}" \
           -f "tag=${TAG}"
-        echo "Dispatched Release workflow for ${TAG} on ${DEFAULT_BRANCH}"
+        echo "Dispatched Release workflow (release.yml) for ${TAG} on ${DEFAULT_BRANCH}"
