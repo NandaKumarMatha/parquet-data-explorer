@@ -185,11 +185,24 @@ python3 scripts/sync_app_info.py
 
 That updates `snap/snapcraft.yaml`, AppStream metainfo, desktop entry, and `setup.py`.
 
-1. Open **Releases** on GitHub → **Draft a new release**.
-2. Tag the version (for example `v1.0.0`).
-3. Publish the release.
+### GitHub Release (Windows + Linux binaries)
 
-CI builds Windows and Linux binaries and uploads them to the release. Official Snap publishing is handled by this repository’s snap workflow on `master` / `main`.
+Chained after a successful Snap publish on `master` / `main`:
+
+1. Bump `APP_VERSION` in `utils/app_info.py` and run `python3 scripts/sync_app_info.py`
+2. Merge / push to `master`
+3. Snap workflow builds, publishes to the store, then:
+   - Creates git tag `v{APP_VERSION}` (if it does not exist)
+   - Dispatches the **Release** workflow
+4. Release workflow uploads `parquet-explorer-Windows.exe` and `parquet-explorer-Linux`
+
+If the tag already exists, Snap still updates edge as usual, but the GitHub Release is not re-triggered.
+
+Optional manual run: Actions → **Release** → **Run workflow**.
+
+### Snap
+
+Official Snap publishing is handled by the snap workflow on `master` / `main` pushes.
 
 ---
 
@@ -211,22 +224,30 @@ Thanks for helping improve the official Parquet Explorer. Please keep forks clea
 
 ### Done
 
-- File operations (open, save, new)
-- Sortable table view and inline editing
+- File operations (open, save, new) and export (CSV / JSON / Excel)
+- Sortable table view, inline editing, undo / redo
 - Search, filter, and pandas queries
-- Statistics panel and visualizations
-- Undo / redo
-- Pagination for large files
-- Themes (dark / light / auto)
-- Windows & Linux builds + Snap packaging
-- CI/CD and basic unit tests
+- Column statistics (page-scoped) and Plotly visualizations (sampled)
+- Pagination for large files (streaming reads, editable page jump)
+- Background page / full-data loading with progress and large-file warnings
+- Safe paginated save / export / query (edit tracking + full-data merge)
+- Themes (dark / light / auto) and font zoom
+- Recent files menu
+- Help → About dialog (version and official product info)
+- Startup splash / loader and single-instance focus (avoids double launches)
+- Terminal launch banner
+- Centralized app metadata (`utils/app_info.py` → packaging sync)
+- Official branding / Snap identity documented
+- Windows & Linux builds, Snap packaging, CI/CD, unit tests
 
 ### Planned
 
-- Advanced filtering UX
+- Streaming save / export without loading the full file into RAM
+- Advanced filtering UX (column filters, saved filters)
 - Plugin system for custom transformations
-- Further performance and accessibility improvements
-- Streaming save/export for very large files
+- Lazy-load WebEngine / lighter viz path for faster cold start
+- Accessibility improvements (keyboard, screen reader)
+- Optional macOS builds
 
 ---
 
