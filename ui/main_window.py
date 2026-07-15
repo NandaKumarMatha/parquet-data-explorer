@@ -13,6 +13,8 @@ from data.parquet_handler import (
 from ui.load_worker import PageLoadWorker, FullDataLoadWorker
 from ui.visualization_widget import VisualizationWidget
 from ui.plot_config_widget import PlotConfigWidget
+from ui.about_dialog import AboutDialog
+from utils.app_info import APP_NAME
 from utils.recent_files import add_recent_file, clear_recent_files, load_recent_files
 
 class StyledComboBox(QComboBox):
@@ -168,7 +170,7 @@ class DataFrameModel(QAbstractTableModel):
 class MainWindow(QMainWindow):
     def __init__(self, file_path=None):
         super().__init__()
-        self.setWindowTitle("Parquet Explorer [*]")
+        self.setWindowTitle(f"{APP_NAME} [*]")
         # Use absolute path for icon to work in snap environments
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.svg")
         if os.path.exists(icon_path):
@@ -322,6 +324,14 @@ class MainWindow(QMainWindow):
             action.triggered.connect(lambda checked, t=theme_name.lower(): self.change_theme(t))
             theme_menu.addAction(action)
             self.theme_group.addAction(action)
+
+        help_menu = menu_bar.addMenu("Help")
+        about_action = QAction(f"About", self)
+        about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(about_action)
+
+    def show_about_dialog(self):
+        AboutDialog(self).exec()
 
     def change_theme(self, theme_name):
         self.current_theme = theme_name
@@ -1006,7 +1016,7 @@ class MainWindow(QMainWindow):
         except (RuntimeError, AttributeError):
             return
 
-        title = "Parquet Explorer"
+        title = APP_NAME
         if self.current_file_path:
             title += f" - {os.path.basename(self.current_file_path)}"
         

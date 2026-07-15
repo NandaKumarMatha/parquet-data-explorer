@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="parquet-explorer",
-    version="0.2.1",
+    version="0.2.53",
     packages=find_packages(),
     py_modules=["main"],
     install_requires=[

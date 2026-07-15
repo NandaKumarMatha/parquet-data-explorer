@@ -4,6 +4,6 @@ Exec=parquet-explorer %F
 Icon=${SNAP}/meta/gui/icon.png
 Type=Application
 Categories=Development;Utility;Database;
-Comment=View and explore Parquet files
+Comment=Official Parquet Explorer — view and edit Parquet files
 Terminal=false
 StartupNotify=true

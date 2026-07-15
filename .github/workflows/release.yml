@@ -1,64 +1,163 @@
 name: Release
 
-# Stable GitHub release assets (master/main only).
-# Snap stable publish runs on master/main push via snap.yml.
+# GitHub Releases with Windows + Linux binaries.
+#
+# Primary trigger: after successful Snap publish (snap.yml creates tag +
+# dispatches this workflow). Tag pushes with GITHUB_TOKEN do not start other
+# workflows, so snap.yml calls `gh workflow run` explicitly.
+#
+# Also supports:
+#   - Manual: Actions → Release → Run workflow
+#   - Manual tag push (if done with a PAT that can trigger workflows)
+#   - Legacy: GitHub Release published event
+
 on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.2.53). Leave empty to use APP_VERSION from utils/app_info.py."
+        required: false
+        type: string
+        default: ""
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    if: github.event.release.target_commitish == 'master' || github.event.release.target_commitish == 'main'
-    permissions:
-      contents: write
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      should_release: ${{ steps.meta.outputs.should_release }}
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        ref: ${{ github.event.release.tag_name }}
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
-    - name: Build executable
-      run: pyinstaller main.spec
-    - name: Rename executable
-      run: move dist\parquet-explorer.exe dist\parquet-explorer-Windows.exe
-    - name: Upload release asset
-      uses: softprops/action-gh-release@v1
-      with:
-        files: dist/parquet-explorer-Windows.exe
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: meta
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+
+          APP_VERSION=$(grep -E '^APP_VERSION = ' utils/app_info.py | head -1 | sed -E 's/^APP_VERSION = "([^"]+)"/\1/')
+          if [ -z "${APP_VERSION:-}" ]; then
+            echo "Could not read APP_VERSION from utils/app_info.py"
+            exit 1
+          fi
+
+          SHOULD_RELEASE=true
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag }}" ]; then
+              TAG="${{ inputs.tag }}"
+            else
+              TAG="v${APP_VERSION}"
+            fi
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-].*)?$ ]]; then
+            echo "Tag must look like v0.2.53 (got: $TAG)"
+            exit 1
+          fi
+
+          # Prefer checking out the tagged commit when the tag already exists.
+          REF_COMMIT="HEAD"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            REF_COMMIT=$(git rev-list -n 1 "refs/tags/${TAG}")
+          fi
+
+          git fetch origin master main 2>/dev/null || true
+          OK=0
+          if git rev-parse --verify origin/master >/dev/null 2>&1; then
+            if git merge-base --is-ancestor "$REF_COMMIT" origin/master; then
+              OK=1
+            fi
+          fi
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            if git merge-base --is-ancestor "$REF_COMMIT" origin/main; then
+              OK=1
+            fi
+          fi
+          if [ "$OK" != "1" ]; then
+            echo "Commit for ${TAG} is not on master/main."
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "Using tag: $TAG"
+
+      - name: Create GitHub Release if missing
+        if: github.event_name != 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Parquet Explorer ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+  build-windows:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.tag }}
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build executable
+        run: pyinstaller main.spec
+      - name: Rename executable
+        run: move dist\parquet-explorer.exe dist\parquet-explorer-Windows.exe
+      - name: Upload Windows asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          files: dist/parquet-explorer-Windows.exe
 
   build-linux:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
-    if: github.event.release.target_commitish == 'master' || github.event.release.target_commitish == 'main'
-    permissions:
-      contents: write
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        ref: ${{ github.event.release.tag_name }}
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
-    - name: Build executable
-      run: pyinstaller --onefile --windowed -n parquet-explorer main.py
-    - name: Rename binary
-      run: mv dist/parquet-explorer dist/parquet-explorer-Linux
-    - name: Upload release asset
-      uses: softprops/action-gh-release@v1
-      with:
-        files: dist/parquet-explorer-Linux
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.tag }}
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build executable
+        run: pyinstaller --onefile --windowed -n parquet-explorer main.py
+      - name: Rename binary
+        run: mv dist/parquet-explorer dist/parquet-explorer-Linux
+      - name: Upload Linux asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          files: dist/parquet-explorer-Linux

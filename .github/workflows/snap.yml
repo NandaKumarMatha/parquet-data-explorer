@@ -22,11 +22,14 @@ jobs:
       id: vars
       run: echo "suffix=$(echo '${{ github.ref_name }}' | sed 's#[/\\:*?"<>|]#-#g')" >> "$GITHUB_OUTPUT"
 
-    - name: Read snap version
+    - name: Read app version
       id: version
       run: |
-        VERSION=$(grep -E '^version:' snap/snapcraft.yaml | head -1 | sed -E "s/^version:[[:space:]]*['\"]?([^'\"]+)['\"]?/\1/")
+        VERSION=$(grep -E '^APP_VERSION = ' utils/app_info.py | head -1 | sed -E 's/^APP_VERSION = "([^"]+)"/\1/')
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Sync packaging metadata from utils/app_info.py
+      run: python3 scripts/sync_app_info.py
 
     - name: Build Snap
       uses: snapcore/action-build@v1
@@ -66,7 +69,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      actions: write
     steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
     - uses: actions/download-artifact@v5
       with:
         name: snap-${{ needs.build.outputs.artifact_suffix }}
@@ -76,6 +86,7 @@ jobs:
       run: sudo snap install snapcraft --classic
 
     - name: Upload to store (cascade channels only when version changes)
+      id: store
       env:
         SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         NEW_VERSION: ${{ needs.build.outputs.snap_version }}
@@ -112,7 +123,7 @@ jobs:
         EDGE_REV=$(channel_field edge 5 || true)
         BETA_REV=$(channel_field beta 5 || true)
 
-        echo "New version (snapcraft.yaml): $NEW_VERSION"
+        echo "New version (utils/app_info.py): $NEW_VERSION"
         echo "Current edge version: ${EDGE_VERSION:-<none>} (rev ${EDGE_REV:-none})"
 
         if [[ "$NEW_VERSION" == "${EDGE_VERSION:-}" ]]; then
@@ -122,6 +133,7 @@ jobs:
           VERSION_CHANGED=true
           echo "Version changed — will cascade: new→edge, old edge→beta, old beta→stable."
         fi
+        echo "version_changed=$VERSION_CHANGED" >> "$GITHUB_OUTPUT"
 
         UPLOAD_LOG=$(snapcraft upload "$SNAP_FILE" 2>&1 | tee /dev/stderr)
         NEW_REV=$(echo "$UPLOAD_LOG" | grep -oE '(Revision|revision) [0-9]+' | tail -1 | awk '{print $2}')
@@ -148,3 +160,38 @@ jobs:
 
         echo "Channel map after release:"
         snapcraft status "$SNAP_NAME" || true
+
+    - name: Push git tag and start GitHub Release workflow
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NEW_VERSION: ${{ needs.build.outputs.snap_version }}
+      run: |
+        set -euo pipefail
+        TAG="v${NEW_VERSION}"
+        git fetch --tags origin
+
+        if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+          echo "Tag ${TAG} already exists — not re-triggering Release."
+          exit 0
+        fi
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        # Tag the commit that was published (this checkout of master/main).
+        git tag -a "${TAG}" -m "Release ${TAG} after Snap publish"
+        git push origin "refs/tags/${TAG}"
+        echo "Pushed tag ${TAG}"
+
+        # Tag pushes authenticated with GITHUB_TOKEN do not start other workflows.
+        # Explicitly dispatch Release (workflow_dispatch is allowed).
+        DEFAULT_BRANCH="master"
+        if git rev-parse --verify origin/main >/dev/null 2>&1 && \
+           ! git rev-parse --verify origin/master >/dev/null 2>&1; then
+          DEFAULT_BRANCH="main"
+        fi
+
+        gh workflow run Release.yml \
+          --repo "${{ github.repository }}" \
+          --ref "${DEFAULT_BRANCH}" \
+          -f "tag=${TAG}"
+        echo "Dispatched Release workflow for ${TAG} on ${DEFAULT_BRANCH}"

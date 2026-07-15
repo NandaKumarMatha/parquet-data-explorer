@@ -1,11 +1,20 @@
 name: parquet-explorer
 title: Parquet Explorer
 base: core24
-version: '0.2.52'
-summary: A simple Parquet file viewer
+version: '0.2.53'
+summary: Official Parquet Explorer — view and edit Parquet files
 description: |
-  A PyQt6 based application to view and explore Parquet files.
-  Features include opening parquet files and viewing them in a table.
+  Official Parquet Explorer by Nanda Kumar Matha (Snap publisher: n-incognito).
+
+  This is the official Snap for Parquet Explorer. Source and releases:
+  https://github.com/NandaKumarMatha/parquet-data-explorer
+
+  A PyQt6 desktop app to open, browse, edit, filter, and visualize Parquet files.
+  Features include pagination for large files, inline editing, search/query,
+  statistics, export (CSV/JSON/Excel), and charts.
+
+  Unofficial forks or lookalike packages are not affiliated with this project.
+  Please install only from this package name: parquet-explorer.
 
 grade: stable
 confinement: strict
