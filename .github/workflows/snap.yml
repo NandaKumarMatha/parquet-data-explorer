@@ -170,21 +170,28 @@ jobs:
         TAG="v${NEW_VERSION}"
         git fetch --tags origin
 
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
         if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-          echo "Tag ${TAG} already exists — not re-triggering Release."
+          echo "Tag ${TAG} already exists — will still dispatch Release if assets are missing."
+        else
+          git tag -a "${TAG}" -m "Release ${TAG} after Snap publish"
+          git push origin "refs/tags/${TAG}"
+          echo "Pushed tag ${TAG}"
+        fi
+
+        # Skip only when the GitHub Release already has both packaged binaries.
+        ASSET_NAMES=$(gh release view "${TAG}" --repo "${{ github.repository }}" --json assets \
+          --jq '.assets[].name' 2>/dev/null || true)
+        HAS_WIN=$(echo "$ASSET_NAMES" | grep -c 'parquet-explorer-Windows.exe' || true)
+        HAS_LINUX=$(echo "$ASSET_NAMES" | grep -c 'parquet-explorer-Linux' || true)
+        if [ "${HAS_WIN}" -ge 1 ] && [ "${HAS_LINUX}" -ge 1 ]; then
+          echo "Release ${TAG} already has Windows + Linux assets — skipping Release dispatch."
           exit 0
         fi
 
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        # Tag the commit that was published (this checkout of master/main).
-        git tag -a "${TAG}" -m "Release ${TAG} after Snap publish"
-        git push origin "refs/tags/${TAG}"
-        echo "Pushed tag ${TAG}"
-
-        # Tag pushes authenticated with GITHUB_TOKEN do not start other workflows.
-        # Explicitly dispatch Release (workflow_dispatch is allowed).
-        # Filename on disk is lowercase: release.yml (GitHub API is case-sensitive).
+        # Tag pushes with GITHUB_TOKEN do not start other workflows — dispatch explicitly.
         DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
         if [ -z "$DEFAULT_BRANCH" ]; then
           DEFAULT_BRANCH="master"

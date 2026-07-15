@@ -196,7 +196,9 @@ Chained after a successful Snap publish on `master` / `main`:
    - Dispatches the **Release** workflow
 4. Release workflow uploads `parquet-explorer-Windows.exe` and `parquet-explorer-Linux`
 
-If the tag already exists, Snap still updates edge as usual, but the GitHub Release is not re-triggered.
+If the tag already exists but release binaries are missing, Snap publish will
+still dispatch the Release workflow. It only skips when both Windows and Linux
+assets are already attached.
 
 Optional manual run: Actions → **Release** → **Run workflow**.
 
